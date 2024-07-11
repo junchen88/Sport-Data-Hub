@@ -7,15 +7,17 @@ from requests_html import HTMLSession, AsyncHTMLSession
 from tqdm.asyncio import tqdm as async_tqdm
 import asyncio
 import webbrowser
+import logging
+
 
 
 class Scraper():
-    def __init__(self) -> None:
+    def __init__(self, logger:logging.Logger) -> None:
         self.session            = HTMLSession()
         self.SCHEDULEMATCHURL   = "https://www.sofascore.com/api/v1/sport/football/scheduled-events/"
         self.EVENTURL           = "https://www.sofascore.com/api/v1/event/"
         self.TEAMURL   = "https://www.sofascore.com/api/v1/team/"
-        pass
+        self.logger = logger
 
     def getLatestFinishedMatch(self, teamID):
         """
@@ -79,7 +81,7 @@ class Scraper():
 
         except Exception as e:
             # log instead
-            print(f"matchID : {matchJsonData['id']}, {e}")
+            self.logger.error(f"matchID : {matchJsonData['id']}, {e}")
             # don't append the current match info into matchIDs
             return numberOfMatchesWithData
 
@@ -191,7 +193,7 @@ class Scraper():
         # will not have players stats, but after qualification, they will have it
         if response.status_code == 404:
             # log instead!
-            print(f"failed to obtain player stats: 404 not found", matchID['league'])
+            self.logger.error(f"failed to obtain player stats: 404 not found: {matchID['league']}")
             return {}
 
         allPlayersStats = response.json()
@@ -200,11 +202,7 @@ class Scraper():
         id = matchID["id"]
         slug = matchID["slug"]
 
-        # stat_id (primary key)
-        # match_id (foreign key referencing Match table)
-        # player_id (foreign key referencing Player table)
-        nextAvailablePlayerID = 0
-        nextAvailableStatID = 0
+
         
         # check for available player id as all player id should be unique
         try:
@@ -214,9 +212,7 @@ class Scraper():
                 player_stats[player["player"]["name"]] = {}
                 player_dict = player_stats[player["player"]["name"]]
 
-                player_dict["stat id"] = nextAvailableStatID
                 player_dict["match id"] = f"{customID}_{id}_{slug}"
-                player_dict["player id"] = nextAvailablePlayerID
                             
                 # if key doesn't exist, it means 0
                 if "statistics" in player.keys():
@@ -257,9 +253,6 @@ class Scraper():
                     player_dict["foul won (was fouled)"] = 'NA'
                     player_dict["shot saved"] = 'NA'
 
-
-                nextAvailablePlayerID += 1
-                nextAvailableStatID += 1
 
         except Exception as e:
             print(f"failed to obtain player stats", repr(e))
@@ -374,7 +367,7 @@ class Scraper():
         playerStats = await async_tqdm.gather(*tasks, desc="getting player stats")
 
         tasks = [self.getMatchStat(asession, matchID) for matchID in matchIDs]
-        past_match_stat = await async_tqdm.gather(*tasks, desc="getting match stats")
+        past_match_stat = await async_tqdm.gather(*tasks, desc="getting stats for each match")
         
 
         for i , match in enumerate(matchIDs):
@@ -410,11 +403,6 @@ class Scraper():
         response = self.session.get(requestURL)
         moreData = response.json()
         self.filterMatchesWithPlayerStat(date,moreData,matchIDs)
-        
-                
-        # for matchID in matchIDs:
-        #     line = f"https://www.sofascore.com/{matchID['slug']}/{matchID['customId']}"
-        #     webbrowser.open(line, new=0, autoraise=True)
 
         print(f"number Of Matches = {len(matchIDs)}")
 
@@ -450,7 +438,7 @@ class Scraper():
         pageNum = 0
         tasks = [self.getPast5Matches(asession, match["home_id"], match["home"], matchIDs=None, pageNum=pageNum) for match in matchIDs]
         tasks.extend([self.getPast5Matches(asession, match["away_id"], match["home"], matchIDs=None, pageNum=pageNum) for match in matchIDs])
-        allPast5MatchIDs = await async_tqdm.gather(*tasks, desc="getting match stats")
+        allPast5MatchIDs = await async_tqdm.gather(*tasks, desc="getting past 5 matches info")
         # print(allPast5MatchIDs)
         teamPastMatchID = []
         for teamMatchInfo in allPast5MatchIDs:
@@ -461,7 +449,11 @@ class Scraper():
 
         return pastMatchesStats
 
-test = Scraper()
+logger = logging.getLogger(__name__)
+logging.basicConfig(filename='messages.log', encoding='utf-8', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+test = Scraper(logger)
 matchIDs = test.getScheduledMatch()
 allPast5MatchesID = asyncio.run(test.testing(matchIDs))
 # fp = open("jsonData.json", "w")
