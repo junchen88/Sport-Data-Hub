@@ -9,14 +9,29 @@ import asyncio
 import webbrowser
 import logging
 
-
+# Dictionary mapping status codes to messages
+STATUS_MESSAGES = {
+    200: "OK",
+    201: "Created",
+    202: "Accepted",
+    204: "No Content",
+    400: "Bad Request",
+    401: "Unauthorized",
+    403: "Forbidden",
+    404: "Not Found",
+    500: "Internal Server Error",
+    502: "Bad Gateway",
+    503: "Service Unavailable",
+}
 
 class Scraper():
     def __init__(self, logger:logging.Logger) -> None:
         self.session            = HTMLSession()
-        self.SCHEDULEMATCHURL   = "https://www.sofascore.com/api/v1/sport/football/scheduled-events/"
-        self.EVENTURL           = "https://www.sofascore.com/api/v1/event/"
-        self.TEAMURL   = "https://www.sofascore.com/api/v1/team/"
+        self.APIURL             = "https://www.sofascore.com/api/v1/"
+        self.SCHEDULEMATCHURL   = f"{self.APIURL}sport/football/scheduled-events/"
+        self.EVENTURL           = f"{self.APIURL}event/"
+        self.TEAMURL            = f"{self.APIURL}team/"
+        self.PLAYERURL          = f"{self.APIURL}player/"
         self.logger = logger
 
     def getLatestFinishedMatch(self, teamID):
@@ -78,6 +93,11 @@ class Scraper():
                         matchIDs.append(matchInfo)
                 
             return numberOfMatchesWithData
+
+        except KeyError as e:
+            # print(e, "Player stat is not available")  
+            # don't append the current match info into matchIDs
+            return numberOfMatchesWithData 
 
         except Exception as e:
             # log instead
@@ -172,6 +192,46 @@ class Scraper():
                         # if data doesn't exist or not updated, call getPast5Matches function
 
 
+    async def getPlayerInformation(self, asession, playerID):
+        """
+        Get the player information using its playerID such as player name, player's team, player's country, and player's birthdate
+        
+        Parameters:
+            playerID: player ID
+
+        Returns:
+            playersInfo (dict): a dictionary containing the player info:
+            {name, team, country, birth_date}
+            {} if not valid
+        """
+        playerURL = self.PLAYERURL + playerID
+        response = await asession.get(playerURL, stream=True)
+
+        # check for request status
+        if response.status_code != 200:
+            # log instead!
+            try:
+                self.logger.error(f"failed to obtain player data for Player {playerID}: {response.status_code} {STATUS_MESSAGES[response.status_code]}")
+            except:
+                self.logger.error(f"failed to obtain player data for Player {playerID}: {response.status_code}")
+
+            return {}
+
+        playersInfo = {}
+
+        response = response.json()["player"]
+        try:
+            playersInfo["player_name"] = response["name"]
+            playersInfo["team"] = {"name":response["team"]["name"], "country": response["team"]["country"]["name"]}
+            
+            playersInfo["country"] = response["country"]["name"]
+            playersInfo["birth_date"] = response["dateOfBirthTimestamp"]
+            return playersInfo
+
+        except Exception as e:
+            self.logger.error(f"failed to obtain player data: {e}")
+            return {}
+        
 
     async def getPlayerMatchStat(self, asession, matchID):
         """
@@ -182,7 +242,7 @@ class Scraper():
 
         Returns:
             player_stats (dict of dict): a dictionary containing player names as key, and a dictionary containing the player stats as value
-            {player:{statid, playerid, matchid, shot on target, assist, goal scored, fouls, was fouled, shot saved if available}, ...}
+            {player:{playerid, matchid, shot on target, assist, goal scored, fouls, was fouled, shot saved if available}, ...}
             {} if not valid
         """
         lineupPart = matchID["id"] + "/lineups"
@@ -191,9 +251,15 @@ class Scraper():
 
         # check for link validity, league such as Champions League Qualification
         # will not have players stats, but after qualification, they will have it
-        if response.status_code == 404:
+
+        # check for request status
+        if response.status_code != 200:
             # log instead!
-            self.logger.error(f"failed to obtain player stats: 404 not found: {matchID['league']}")
+            try:
+                self.logger.error(f"failed to obtain player stats for {matchID}: {response.status_code} {STATUS_MESSAGES[response.status_code]}")
+            except:
+                self.logger.error(f"failed to obtain player stats for {matchID}: {response.status_code}")
+
             return {}
 
         allPlayersStats = response.json()
@@ -213,7 +279,8 @@ class Scraper():
                 player_dict = player_stats[player["player"]["name"]]
 
                 player_dict["match id"] = f"{customID}_{id}_{slug}"
-                            
+                player_dict["player id"] = player["player"]["id"]
+
                 # if key doesn't exist, it means 0
                 if "statistics" in player.keys():
                     minutesPlayed = player["statistics"].get("minutesPlayed", 0)
