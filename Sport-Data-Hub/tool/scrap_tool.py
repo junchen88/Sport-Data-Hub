@@ -23,6 +23,7 @@ STATUS_MESSAGES = {
     502: "Bad Gateway",
     503: "Service Unavailable",
 }
+MAXSTARTINGPLAYER = 11
 
 class Scraper():
     def __init__(self, logger:logging.Logger) -> None:
@@ -69,7 +70,9 @@ class Scraper():
                     'home_id':matchJsonData['homeTeam']['id'], 
                     'away_id':matchJsonData['awayTeam']['id'],
                     'startTimestamp': matchJsonData["startTimestamp"],
-                    'league': matchJsonData["tournament"]["name"]
+                    'league': matchJsonData["tournament"]["name"],
+                    "home_country": matchJsonData['homeTeam']['country']['name'],
+                    "away_country": matchJsonData['awayTeam']['country']['name']
 
                 }
 
@@ -157,7 +160,9 @@ class Scraper():
                         'home_id':matchJsonData['homeTeam']['id'], 
                         'away_id':matchJsonData['awayTeam']['id'],
                         'startTimestamp': matchJsonData["startTimestamp"],
-                        'league': matchJsonData["tournament"]["name"]
+                        'league': matchJsonData["tournament"]["name"],
+                        'home_country':matchJsonData['homeTeam']['country']['name'],
+                        'away_country':matchJsonData['awayTeam']['country']['name']
                     }
                     matchIDs.append(matchInfo)
         
@@ -204,7 +209,7 @@ class Scraper():
             {name, team, country, birth_date}
             {} if not valid
         """
-        playerURL = self.PLAYERURL + playerID
+        playerURL = f"{self.PLAYERURL}{playerID}"
         response = await asession.get(playerURL, stream=True)
 
         # check for request status
@@ -241,7 +246,8 @@ class Scraper():
             matchID: ID of the football match
 
         Returns:
-            player_stats (dict of dict): a dictionary containing player names as key, and a dictionary containing the player stats as value
+            all_player_stats (dict of dict of dict): a dictionary containing home/away as key, item = dict containing
+            player names as key, and a dictionary containing the player stats as value
             {player:{playerid, matchid, shot on target, assist, goal scored, fouls, was fouled, shot saved if available}, ...}
             {} if not valid
         """
@@ -263,7 +269,7 @@ class Scraper():
             return {}
 
         allPlayersStats = response.json()
-        player_stats = {}
+        all_player_stats = {}               # to store players stat for the match
         customID = matchID["customId"]
         id = matchID["id"]
         slug = matchID["slug"]
@@ -272,60 +278,69 @@ class Scraper():
         
         # check for available player id as all player id should be unique
         try:
-            for player in allPlayersStats["home"]["players"]:
+            for team in allPlayersStats.keys():
+                if team != "confirmed" and (team == "home" or team == "away"):
+                    all_player_stats[team] = {}
+                    for i, player in enumerate(allPlayersStats[team]["players"]):
+                        
+                        # init dict
+                        player_dict = {}
+                       
+                        player_dict["match id"] = f"{customID}_{id}_{slug}"
+                        player_dict["player id"] = player["player"]["id"]
 
-                # init dict
-                player_stats[player["player"]["name"]] = {}
-                player_dict = player_stats[player["player"]["name"]]
+                        # starting player if it is the first 11 players
+                        player_dict["is starting player"] = True if i < MAXSTARTINGPLAYER else False
+                            
 
-                player_dict["match id"] = f"{customID}_{id}_{slug}"
-                player_dict["player id"] = player["player"]["id"]
+                        # if key doesn't exist, it means 0
+                        if "statistics" in player.keys():
+                            minutesPlayed = player["statistics"].get("minutesPlayed", 0)
+                            player_dict["minutesPlayed"] = minutesPlayed
 
-                # if key doesn't exist, it means 0
-                if "statistics" in player.keys():
-                    minutesPlayed = player["statistics"].get("minutesPlayed", 0)
-                    player_dict["minutesPlayed"] = minutesPlayed
+                            # get shots related data
+                            blockedShots    = player["statistics"].get("blockedScoringAttempt", 0)
+                            shotOffTargets  = player["statistics"].get("shotOffTarget", 0)
+                            shotOnTargets   = player["statistics"].get("onTargetScoringAttempt", 0)
+                            player_dict["shot made"] = blockedShots + shotOffTargets + shotOnTargets
+                            player_dict["shot on target"] = shotOnTargets
 
-                    # get shots related data
-                    blockedShots    = player["statistics"].get("blockedScoringAttempt", 0)
-                    shotOffTargets  = player["statistics"].get("shotOffTarget", 0)
-                    shotOnTargets   = player["statistics"].get("onTargetScoringAttempt", 0)
-                    player_dict["shot made"] = blockedShots + shotOffTargets + shotOnTargets
-                    player_dict["shot on target"] = shotOnTargets
+                            # get goal related data
+                            goalAssist = player["statistics"].get("goalAssist", 0)
+                            player_dict["assist"] = goalAssist
+                            goals = player["statistics"].get("goals", 0)
+                            player_dict["goal scored"] = goals
 
-                    # get goal related data
-                    goalAssist = player["statistics"].get("goalAssist", 0)
-                    player_dict["assist"] = goalAssist
-                    goals = player["statistics"].get("goals", 0)
-                    player_dict["goal scored"] = goals
+                            # get foul related data
+                            fouls = player["statistics"].get("fouls", 0)
+                            player_dict["fouls"] = fouls
+                            foulWon = player["statistics"].get("wasFouled", 0)
+                            player_dict["foul won (was fouled)"] = foulWon
 
-                    # get foul related data
-                    fouls = player["statistics"].get("fouls", 0)
-                    player_dict["fouls"] = fouls
-                    foulWon = player["statistics"].get("wasFouled", 0)
-                    player_dict["foul won (was fouled)"] = foulWon
+                            # get shot saved data
+                            saves = player["statistics"].get("saves", 0)
+                            player_dict["shot saved"] = saves
+                        
+                        # when player doesn't have the statistics keyword
+                        else:
+                            player_dict["minutesPlayed"] = 'NA'
+                            player_dict["shot made"] = 'NA'
+                            player_dict["shot on target"] = 'NA'
+                            player_dict["assist"] = 'NA'
+                            player_dict["goal scored"] = 'NA'
+                            player_dict["fouls"] = 'NA'
+                            player_dict["foul won (was fouled)"] = 'NA'
+                            player_dict["shot saved"] = 'NA'
 
-                    # get shot saved data
-                    saves = player["statistics"].get("saves", 0)
-                    player_dict["shot saved"] = saves
-                
-                # when player doesn't have the statistics keyword
-                else:
-                    player_dict["minutesPlayed"] = 'NA'
-                    player_dict["shot made"] = 'NA'
-                    player_dict["shot on target"] = 'NA'
-                    player_dict["assist"] = 'NA'
-                    player_dict["goal scored"] = 'NA'
-                    player_dict["fouls"] = 'NA'
-                    player_dict["foul won (was fouled)"] = 'NA'
-                    player_dict["shot saved"] = 'NA'
+                        # add to match player dict
+                        all_player_stats[team][player["player"]["name"]] = player_dict
 
 
         except Exception as e:
             print(f"failed to obtain player stats", repr(e))
-            player_stats = {}
+            all_player_stats = {}
 
-        return player_stats
+        return all_player_stats
 
     async def getMatchStat(self, asession, matchIDs):
         """
@@ -345,6 +360,8 @@ class Scraper():
         match_stats = {}
         match_stats["home"] = matchIDs["home"]
         match_stats["away"] = matchIDs["away"]
+        match_stats["home_country"] = matchIDs["home_country"]
+        match_stats["away_country"] = matchIDs["away_country"]
 
         if response.status_code == 200:
             allMatchStats = response.json()
@@ -498,30 +515,3 @@ class Scraper():
         """
         self.session.close()
 
-
-    async def testing(self, matchIDs):
-        
-        asession = AsyncHTMLSession()
-        pageNum = 0
-        tasks = [self.getPast5Matches(asession, match["home_id"], match["home"], matchIDs=None, pageNum=pageNum) for match in matchIDs]
-        tasks.extend([self.getPast5Matches(asession, match["away_id"], match["home"], matchIDs=None, pageNum=pageNum) for match in matchIDs])
-        allPast5MatchIDs = await async_tqdm.gather(*tasks, desc="getting past 5 matches info")
-        # print(allPast5MatchIDs)
-        teamPastMatchID = []
-        for teamMatchInfo in allPast5MatchIDs:
-            for team, matchIDs in teamMatchInfo.items():
-                teamPastMatchID.extend(matchIDs)
-
-        pastMatchesStats = await self.getAllMatchCompleteStat(teamPastMatchID)
-
-        return pastMatchesStats
-
-logger = logging.getLogger(__name__)
-logging.basicConfig(filename='messages.log', encoding='utf-8', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
-
-
-test = Scraper(logger)
-matchIDs = test.getScheduledMatch()
-allPast5MatchesID = asyncio.run(test.testing(matchIDs))
-# fp = open("jsonData.json", "w")
-# json.dump(allPast5MatchesID[0], fp, indent = 6)
