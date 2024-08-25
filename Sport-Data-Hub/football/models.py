@@ -16,9 +16,12 @@ class Team(models.Model):
 class Player(models.Model):
     player_id = models.AutoField(primary_key=True)
     player_name = models.CharField(max_length=100)
-    team = models.ForeignKey(Team, on_delete=models.CASCADE)
-    country = models.ForeignKey(Team, on_delete=models.CASCADE)
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='players')
+    country = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='players_country')
+    birth_date = models.DateField()
 
+    class Meta:
+        unique_together = ('player_name', 'birth_date')  # Ensure player is unique
 
     def __str__(self):
         return self.player_name
@@ -26,10 +29,14 @@ class Player(models.Model):
 class Match(models.Model):
     match_id = models.AutoField(primary_key=True)
     date = models.DateField(db_index=True)
-    venue = models.CharField(max_length=100)
-    homeTeam = models.ForeignKey(Team, on_delete=models.CASCADE)
-    awayTeam = models.ForeignKey(Team, on_delete=models.CASCADE)
-    stat_id = models.AutoField(primary_key=True)
+    # venue = models.CharField(max_length=100)
+    league = models.CharField(max_length=100)
+
+    # Reverse Accessors: Django creates reverse relationships automatically unless a related_name is provided
+    # related_name is needed. eg. ateam.home_matches.all() will return all the past matches played as the home
+    # team
+    homeTeam = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='home_matches')
+    awayTeam = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='away_matches')
     yellow_cards = models.IntegerField(default=0)
     red_cards = models.IntegerField(default=0)
     home_shots = models.IntegerField(default=0)
@@ -40,13 +47,16 @@ class Match(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=['home_team', 'date']),  # Index for home_team and date
-            models.Index(fields=['away_team', 'date']),  # Index for away_team and date
+            models.Index(fields=['homeTeam', 'date']),  # Index for home_team and date
+            models.Index(fields=['awayTeam', 'date']),  # Index for away_team and date
             # Additional indexes can be added as needed
         ]
 
     def __str__(self):
-        return f"{self.date} - {self.country.country_name} - {self.venue}"
+        return f"{self.date} - {self.league} - {self.homeTeam} vs {self.awayTeam} - {self.venue}"
+
+    class Meta:
+        unique_together = ('date', 'league', 'homeTeam', 'awayTeam')  # Ensure each player has stats only once per match
 
 
     
