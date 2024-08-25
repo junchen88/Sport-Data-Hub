@@ -24,7 +24,7 @@ STATUS_MESSAGES = {
     503: "Service Unavailable",
 }
 MAXSTARTINGPLAYER = 11
-DEFAULTBIRTHEPOCH = -2208988800 # represents 1900-01-01
+SENTINELBIRTHEPOCH = -2208988800 # represents 1900-01-01
 
 class Scraper():
     def __init__(self, logger:logging.Logger) -> None:
@@ -232,7 +232,7 @@ class Scraper():
             playersInfo["team"] = {"name":response["team"]["name"], "country": response["team"]["country"]["name"]}
             
             playersInfo["country"] = response["country"]["name"]
-            birthdate = datetime.utcfromtimestamp(response.get('dateOfBirthTimestamp',DEFAULTBIRTHEPOCH))
+            birthdate = datetime.utcfromtimestamp(response.get('dateOfBirthTimestamp',SENTINELBIRTHEPOCH)).date()
 
             playersInfo["birth_date"] = birthdate
             return playersInfo
@@ -298,7 +298,7 @@ class Scraper():
                         
 
                         player_dict["country"] = player['player']["country"].get("name", "NA")
-                        birthdate = datetime.utcfromtimestamp(player['player'].get('dateOfBirthTimestamp',DEFAULTBIRTHEPOCH))
+                        birthdate = datetime.utcfromtimestamp(player['player'].get('dateOfBirthTimestamp',SENTINELBIRTHEPOCH)).date()
                         player_dict["birth_date"] = birthdate
 
                         # if key doesn't exist, it means 0
