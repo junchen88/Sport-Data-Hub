@@ -24,6 +24,7 @@ STATUS_MESSAGES = {
     503: "Service Unavailable",
 }
 MAXSTARTINGPLAYER = 11
+DEFAULTBIRTHEPOCH = -2208988800 # represents 1900-01-01
 
 class Scraper():
     def __init__(self, logger:logging.Logger) -> None:
@@ -161,8 +162,9 @@ class Scraper():
                         'away_id':matchJsonData['awayTeam']['id'],
                         'startTimestamp': matchJsonData["startTimestamp"],
                         'league': matchJsonData["tournament"]["name"],
-                        'home_country':matchJsonData['homeTeam']['country']['name'],
-                        'away_country':matchJsonData['awayTeam']['country']['name']
+
+                        'home_country':matchJsonData['homeTeam']['country'].get('name', 'NA'),
+                        'away_country':matchJsonData['awayTeam']['country'].get('name', 'NA')
                     }
                     matchIDs.append(matchInfo)
         
@@ -230,7 +232,9 @@ class Scraper():
             playersInfo["team"] = {"name":response["team"]["name"], "country": response["team"]["country"]["name"]}
             
             playersInfo["country"] = response["country"]["name"]
-            playersInfo["birth_date"] = response["dateOfBirthTimestamp"]
+            birthdate = datetime.utcfromtimestamp(response.get('dateOfBirthTimestamp',DEFAULTBIRTHEPOCH))
+
+            playersInfo["birth_date"] = birthdate
             return playersInfo
 
         except Exception as e:
@@ -291,7 +295,11 @@ class Scraper():
 
                         # starting player if it is the first 11 players
                         player_dict["is starting player"] = True if i < MAXSTARTINGPLAYER else False
-                            
+                        
+
+                        player_dict["country"] = player['player']["country"].get("name", "NA")
+                        birthdate = datetime.utcfromtimestamp(player['player'].get('dateOfBirthTimestamp',DEFAULTBIRTHEPOCH))
+                        player_dict["birth_date"] = birthdate
 
                         # if key doesn't exist, it means 0
                         if "statistics" in player.keys():
