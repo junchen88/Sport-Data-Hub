@@ -101,6 +101,8 @@ class Scraper():
         except KeyError as e:
             # print(e, "Player stat is not available")  
             # don't append the current match info into matchIDs
+            self.logger.error(f"matchID : {matchJsonData['id']}, KeyError: {e}")
+
             return numberOfMatchesWithData 
 
         except Exception as e:
@@ -233,6 +235,7 @@ class Scraper():
             
             playersInfo["country"] = response["country"]["name"]
             birthdate = datetime.utcfromtimestamp(response.get('dateOfBirthTimestamp',SENTINELBIRTHEPOCH)).date()
+            birthdate = datetime.combine(birthdate, datetime.min.time()) # convert back to datetime obj
 
             playersInfo["birth_date"] = birthdate
             return playersInfo
@@ -299,6 +302,8 @@ class Scraper():
 
                         player_dict["country"] = player['player']["country"].get("name", "NA")
                         birthdate = datetime.utcfromtimestamp(player['player'].get('dateOfBirthTimestamp',SENTINELBIRTHEPOCH)).date()
+                        birthdate = datetime.combine(birthdate, datetime.min.time()) # convert back to datetime obj
+                        
                         player_dict["birth_date"] = birthdate
 
                         # if key doesn't exist, it means 0
@@ -370,6 +375,10 @@ class Scraper():
         match_stats["away"] = matchIDs["away"]
         match_stats["home_country"] = matchIDs["home_country"]
         match_stats["away_country"] = matchIDs["away_country"]
+        match_stats["date"] =  datetime.utcfromtimestamp(matchIDs["startTimestamp"])
+        match_stats["league"] = matchIDs["league"]
+
+        requiredInformationCount = 0
 
         if response.status_code == 200:
             allMatchStats = response.json()
@@ -391,24 +400,50 @@ class Scraper():
                     
                 homePrefix = periodPrefix + "home_"
                 awayPrefix = periodPrefix + "away_"
-                # go through each stat type
+
+                # init required stats
+                match_stats[f"{homePrefix}corners"] = 0
+                match_stats[f"{awayPrefix}corners"] = 0
+                match_stats[f"{homePrefix}fouls"] = 0
+                match_stats[f"{awayPrefix}fouls"] = 0
+                match_stats[f"{homePrefix}yellowCards"] = 0
+                match_stats[f"{awayPrefix}yellowCards"] = 0
+                match_stats[f"{homePrefix}redCards"] = 0
+                match_stats[f"{awayPrefix}redCards"] = 0
+                match_stats[f"{homePrefix}totalShot"] = 0
+                match_stats[f"{awayPrefix}totalShot"] = 0
+                match_stats[f"{homePrefix}shotOnTarget"] = 0
+                match_stats[f"{awayPrefix}shotOnTarget"] = 0
+                match_stats[f"{homePrefix}totalSaves"] = 0
+                match_stats[f"{awayPrefix}totalSaves"] = 0
+
+                # update each stat type if exists
                 for statsType in matchStats["groups"]:
                     if statsType["groupName"] == "Match overview":
+                        requiredInformationCount += 1
 
                         # go though each stats under the Match Overview category
                         # we only want corner kicks and fouls from this category
                         for statItem in statsType["statisticsItems"]:
                             if statItem["name"] == "Corner kicks":
                                 
-                                match_stats[f"{homePrefix}corner"] = statItem.get("home", 0)
-                                match_stats[f"{awayPrefix}corner"] = statItem.get("away", 0)
+                                match_stats[f"{homePrefix}corners"] = statItem.get("home", 0)
+                                match_stats[f"{awayPrefix}corners"] = statItem.get("away", 0)
 
                             elif statItem["name"] == "Fouls":
                                 match_stats[f"{homePrefix}fouls"] = statItem.get("home", 0)
                                 match_stats[f"{awayPrefix}fouls"] = statItem.get("away", 0)
+
+                            elif statItem["name"] == "Yellow cards":
+                                match_stats[f"{homePrefix}yellowCards"] = statItem.get("home", 0)
+                                match_stats[f"{awayPrefix}yellowCards"] = statItem.get("away", 0)
                         
+                            elif statItem["name"] == "Red cards":
+                                match_stats[f"{homePrefix}redCards"] = statItem.get("home", 0)
+                                match_stats[f"{awayPrefix}redCards"] = statItem.get("away", 0)
 
                     elif statsType["groupName"] == "Shots":
+                        requiredInformationCount += 1
 
                         # go though each stats under the Shots category
                         # we only want total shots and shots on target from this category
@@ -423,6 +458,7 @@ class Scraper():
 
 
                     elif statsType["groupName"] == "Goalkeeping":
+                        requiredInformationCount += 1
 
                         # go though each stats under the Goalkeeping category
                         # we only want total saves from this category
@@ -431,7 +467,11 @@ class Scraper():
                                 match_stats[f"{homePrefix}totalSaves"] = statItem.get("home", 0)
                                 match_stats[f"{awayPrefix}totalSaves"] = statItem.get("away", 0)
                                 break #exit the loop as we got the required stat already
-            
+        else:
+            match_stats = {}
+
+        if requiredInformationCount < 3:
+            match_stats = {}
         return match_stats
                     
 
@@ -463,7 +503,8 @@ class Scraper():
         
 
         for i , match in enumerate(matchIDs):
-            past_match_stat[i]["player_stats"] = playerStats[i]
+            if past_match_stat[i]:
+                past_match_stat[i]["player_stats"] = playerStats[i]
 
         return past_match_stat
 

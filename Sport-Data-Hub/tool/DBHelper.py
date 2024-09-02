@@ -8,7 +8,7 @@ import os
 from django.conf import settings
 import datetime
 import logging
-
+from sqlalchemy.exc import IntegrityError
 
 class DBHelper():
     def __init__(self, logger:logging.Logger):
@@ -38,13 +38,16 @@ class DBHelper():
             )
             session.add(player)
             session.commit()
+            newPlayerID = player.team_id
             session.close()
+            return newPlayerID
 
 
         except Exception as e:
             session.rollback()
             self.logger.error(f"Fail to add the following player: {e.orig}")
             session.close()
+            return None
 
 
         
@@ -70,57 +73,79 @@ class DBHelper():
             return None
 
     # Insert function
-    def insert_stat_data(self, data):
-        session = Session(self.engine)
+    def insert_stat_data(self, data, teamToIDDict, playerToIDDict):
+        try:
+            session = Session(self.engine)
 
-        # Insert for match
-        match = self.Match(
-            date=datetime.datetime.now(),  # Replace with match date
-            venue=data.get('venue', 'Unknown Venue'),
+            # Insert for match
+            match = self.Match(
+                date=datetime.datetime.now(),  # Replace with match date
+                # venue=data.get('venue', 'Unknown Venue'),
 
-            # Assign homeTeam and awayTeam using query data
-            # if home/team doesn't exist in the db, add its information
-            homeTeam=session.query(self.Team).filter_by(team_name=data['home']).first(),
-            awayTeam=session.query(self.Team).filter_by(team_name=data['away']).first(),
-            yellow_cards=int(data['home_corner']),
-            red_cards=int(data['away_corner']),
-            home_shots=int(data['home_totalShot']),
-            away_shots=int(data['away_totalShot']),
-            home_shots_target=int(data['home_shotOnTarget']),
-            away_shots_target=int(data['away_shotOnTarget']),
-            fouls=int(data['home_fouls']),
-        )
-
-        session.add(match)
-        session.commit()
-
-        # Insert PlayerStats
-        player_stats_data = data['player_stats']
-        for player_name, stats in player_stats_data.items():
-            player = session.query(self.Player).filter_by(player_name=player_name).first()  # Example query
-
-            # if player is not found
-            if not player:
-                #create player and add stat
-                pass
-
-            player_stat = self.PlayerStats(
-                match=match,
-                player=player,
-                goals_scored=int(stats['goal scored']),
-                assists=int(stats['assist']),
-                yellow_cards=int(stats['yellow_cards']),
-                red_cards=int(stats['red_cards']),
-                shots=int(stats['shot made']),
-                shots_target=int(stats['shot on target']),
-                fouls_committed=int(stats['fouls']),
-                fouls_won=int(stats['foul won (was fouled)']),
+                # Assign homeTeam and awayTeam using query data
+                # homeTeam=session.query(self.Team).filter_by(team_name=data['home']).first(),
+                # awayTeam=session.query(self.Team).filter_by(team_name=data['away']).first(),
+                league=data["league"],
+                homeTeam_id=teamToIDDict[data["home"]],
+                awayTeam_id=teamToIDDict[data["away"]],
+                yellow_cards=int(data['home_yellowCards']),
+                red_cards=int(data['away_redCards']),
+                home_shots=int(data['home_totalShot']),
+                away_shots=int(data['away_totalShot']),
+                home_shots_target=int(data['home_shotOnTarget']),
+                away_shots_target=int(data['away_shotOnTarget']),
+                home_fouls = int(data['home_fouls']),
+                away_fouls = int(data['away_fouls']),
+                home_corners = int(data['home_corners']),
+                away_corners = int(data['away_corners']),
             )
-            session.add(player_stat)
-            
 
-        session.commit()
-        session.close()
+            session.add(match)
+            match_id = match.match_id
+            session.commit()
+
+            # Insert PlayerStats
+            player_stats_data = data['player_stats']
+            if player_stats_data:
+                for team, playerStats in player_stats_data.items():
+                    for player_name, stats in playerStats.items():
+                        # player = session.query(self.Player).filter_by(player_name=player_name).first()  # Example query
+                        player_id = playerToIDDict[player_name]
+
+
+                        player_stat = self.PlayerStats(
+                            match=match_id,
+                            player=player_id,
+                            goals_scored=int(stats['goal scored']),
+                            assists=int(stats['assist']),
+                            yellow_cards=int(stats['yellow_cards']),
+                            red_cards=int(stats['red_cards']),
+                            shots=int(stats['shot made']),
+                            shots_target=int(stats['shot on target']),
+                            fouls_committed=int(stats['fouls']),
+                            fouls_won=int(stats['foul won (was fouled)']),
+                        )
+                        session.add(player_stat)
+                
+
+            session.commit()
+            session.close()
+        # except KeyError as e:
+        #     session.rollback()
+        #     session.close()
+        #     self.logger.error(f"Fail to add the match and players stats: {e}")
+        #     print(data['home'], "\n\n\n\n\n", e)
+        except IntegrityError as e:
+            session.rollback()
+            print("IntegrityError occurred: The item already exists or violates a constraint.")
+            print("Error details:", e)
+
+
+        # except Exception as e:
+        #     session.rollback()
+        #     self.logger.error(f"Fail to add the match and players stats: {e}")
+        #     # print(data, "\n\n\n\n\n", e)
+        #     session.close()
 
     def checkItemInDB(self, countryInDB:dict=None, countryNotInDB:set=None, playerCountry=None, **kwargs):
         if len(kwargs) != 3:
@@ -181,7 +206,6 @@ class DBHelper():
                 return False
 
             else:
-                print(kwargs)
                 session.commit()
                 session.close()
                 return False
