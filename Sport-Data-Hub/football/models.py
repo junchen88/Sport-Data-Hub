@@ -43,7 +43,11 @@ class Match(models.Model):
     away_shots = models.IntegerField(default=0)
     home_shots_target = models.IntegerField(default=0)
     away_shots_target = models.IntegerField(default=0)
-    fouls = models.IntegerField(default=0)
+    home_fouls = models.IntegerField(default=0)
+    away_fouls = models.IntegerField(default=0)
+    home_corners = models.IntegerField(default=0)
+    away_corners = models.IntegerField(default=0)
+
 
     class Meta:
         indexes = [
@@ -66,8 +70,8 @@ class PlayerStats(models.Model):
     player = models.ForeignKey(Player, on_delete=models.CASCADE)
     goals_scored = models.IntegerField(default=0)
     assists = models.IntegerField(default=0)
-    yellow_cards = models.IntegerField(default=0)
-    red_cards = models.IntegerField(default=0)
+    # yellow_cards = models.IntegerField(default=0)
+    # red_cards = models.IntegerField(default=0)
     shots = models.IntegerField(default=0)
     shots_target = models.IntegerField(default=0)
     fouls_committed = models.IntegerField(default=0)
