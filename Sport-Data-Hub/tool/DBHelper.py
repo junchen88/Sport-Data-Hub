@@ -108,8 +108,7 @@ class DBHelper():
 
         except IntegrityError as e:
             session.rollback()
-            print("IntegrityError occurred: The item already exists or violates a constraint.")
-            print("Error details:", e)
+            self.logger.error(f"IntegrityError occurred: The item already exists or violates a constraint.\nError details: {e.orig.args}")
 
         try:
             if matchID == None:
@@ -117,14 +116,13 @@ class DBHelper():
                 pass
 
             else:
-                print(len(playerToIDDict))
                 # Insert PlayerStats
                 player_stats_data = data['player_stats']
                 if player_stats_data:
                     for team, playerStats in player_stats_data.items():
                         for player_name, stats in playerStats.items():
                             # player = session.query(self.Player).filter_by(player_name=player_name).first()  # Example query
-                            playerID = playerToIDDict[player_name]
+                            playerID = playerToIDDict[(player_name, stats["birth_date"])]
 
 
                             player_stat = self.PlayerStats(
@@ -151,8 +149,8 @@ class DBHelper():
         #     print(data['home'], "\n\n\n\n\n", e)
         except IntegrityError as e:
             session.rollback()
-            print("IntegrityError occurred: The item already exists or violates a constraint.")
-            print("Error details:", e)
+            self.logger.error(f"IntegrityError occurred: The item already exists or violates a constraint.\nError details: {e.orig.args}")
+
 
 
         # except Exception as e:
