@@ -38,7 +38,7 @@ class DBHelper():
             )
             session.add(player)
             session.commit()
-            newPlayerID = player.team_id
+            newPlayerID = player.player_id
             session.close()
             return newPlayerID
 
@@ -74,12 +74,13 @@ class DBHelper():
 
     # Insert function
     def insert_stat_data(self, data, teamToIDDict, playerToIDDict):
+        matchID = None
         try:
             session = Session(self.engine)
 
             # Insert for match
             match = self.Match(
-                date=datetime.datetime.now(),  # Replace with match date
+                date=data["date"],  # Replace with match date
                 # venue=data.get('venue', 'Unknown Venue'),
 
                 # Assign homeTeam and awayTeam using query data
@@ -101,32 +102,45 @@ class DBHelper():
             )
 
             session.add(match)
-            match_id = match.match_id
             session.commit()
-
-            # Insert PlayerStats
-            player_stats_data = data['player_stats']
-            if player_stats_data:
-                for team, playerStats in player_stats_data.items():
-                    for player_name, stats in playerStats.items():
-                        # player = session.query(self.Player).filter_by(player_name=player_name).first()  # Example query
-                        player_id = playerToIDDict[player_name]
+            matchID = match.match_id
 
 
-                        player_stat = self.PlayerStats(
-                            match=match_id,
-                            player=player_id,
-                            goals_scored=int(stats['goal scored']),
-                            assists=int(stats['assist']),
-                            yellow_cards=int(stats['yellow_cards']),
-                            red_cards=int(stats['red_cards']),
-                            shots=int(stats['shot made']),
-                            shots_target=int(stats['shot on target']),
-                            fouls_committed=int(stats['fouls']),
-                            fouls_won=int(stats['foul won (was fouled)']),
-                        )
-                        session.add(player_stat)
-                
+        except IntegrityError as e:
+            session.rollback()
+            print("IntegrityError occurred: The item already exists or violates a constraint.")
+            print("Error details:", e)
+
+        try:
+            if matchID == None:
+                # query for the match ID
+                pass
+
+            else:
+                print(len(playerToIDDict))
+                # Insert PlayerStats
+                player_stats_data = data['player_stats']
+                if player_stats_data:
+                    for team, playerStats in player_stats_data.items():
+                        for player_name, stats in playerStats.items():
+                            # player = session.query(self.Player).filter_by(player_name=player_name).first()  # Example query
+                            playerID = playerToIDDict[player_name]
+
+
+                            player_stat = self.PlayerStats(
+                                match_id=matchID,
+                                player_id=playerID,
+                                goals_scored=int(stats['goal scored']),
+                                assists=int(stats['assist']),
+                                # yellow_cards=int(stats['yellow_cards']),
+                                # red_cards=int(stats['red_cards']),
+                                shots=int(stats['shot made']),
+                                shots_target=int(stats['shot on target']),
+                                fouls_committed=int(stats['fouls']),
+                                fouls_won=int(stats['foul won (was fouled)']),
+                            )
+                            session.add(player_stat)
+                    
 
             session.commit()
             session.close()
