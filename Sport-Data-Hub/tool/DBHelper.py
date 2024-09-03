@@ -108,7 +108,7 @@ class DBHelper():
 
         except IntegrityError as e:
             session.rollback()
-            self.logger.error(f"IntegrityError occurred: The item already exists or violates a constraint.\nError details: {e.orig.args}")
+            self.logger.error(f"IntegrityError occurred: The item already exists or violates a constraint.\nError details: {e.orig}")
 
         try:
             if matchID == None:
@@ -149,7 +149,7 @@ class DBHelper():
         #     print(data['home'], "\n\n\n\n\n", e)
         except IntegrityError as e:
             session.rollback()
-            self.logger.error(f"IntegrityError occurred: The item already exists or violates a constraint.\nError details: {e.orig.args}")
+            self.logger.error(f"IntegrityError occurred: The item already exists or violates a constraint.\nError details: {e.orig}")
 
 
 
@@ -189,7 +189,7 @@ class DBHelper():
                                 countryInDB[aCountry.team_name] = aCountry.team_id
 
                     else:
-                        countryNotInDB.add(playerCountry)
+                        countryNotInDB.add((playerCountry,playerCountry))
                     
 
             for key, value in kwargs.items():

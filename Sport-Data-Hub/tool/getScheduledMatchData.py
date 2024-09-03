@@ -6,6 +6,7 @@ from tqdm.asyncio import tqdm as async_tqdm
 import json
 from tool import DBHelper
 from tqdm import tqdm
+from datetime import datetime
 
 
 
@@ -23,12 +24,10 @@ playerNeedInfo = set() #to store the players that is not in db
 
 teamToIDDict = {}
 playerToIDDict = {}
-countryInDB = {}
-countryNotInDB = set()
 
-# get past matches for each team, default no of matches = 10
+# scrape past matches for each team, default no of matches = 5
 # read db and get data first, if not use scraper.getPast5matches
-async def getScheduledMatchStat(scraper:st.Scraper, matchIDs):
+async def scrapeScheduledMatchStat(scraper:st.Scraper, matchIDs):
         
     asession = AsyncHTMLSession()
     
@@ -86,7 +85,7 @@ def checkInDb(scrapedData, checkType="team"):
                         if (name, player["birth_date"]) not in playerChecked:
                             playerChecked.add((name, player["birth_date"]))
                             
-                            result = dbHelper.checkItemInDB(countryInDB, countryNotInDB, player['country'], table="player", player_name=name, birth_date=player["birth_date"])
+                            result = dbHelper.checkItemInDB(teamToIDDict, teamNeedInfo, player['country'], table="player", player_name=name, birth_date=player["birth_date"])
                             if type(result) is bool:
                                 playerNeedInfo.add((name, match[team], player['country'], player["birth_date"]))
 
@@ -96,11 +95,6 @@ def checkInDb(scrapedData, checkType="team"):
                     
   
 def addDataToDB(pastMatchesStats):
-    if countryNotInDB:
-        for country in countryNotInDB:
-            countryId = dbHelper.insert_team((country,country))
-            if countryId is not None:
-                countryInDB[country] = countryId
 
     if teamNeedInfo:
         for teamInfo in teamNeedInfo:
@@ -112,7 +106,7 @@ def addDataToDB(pastMatchesStats):
     if playerNeedInfo:
         for playerInfo in tqdm(playerNeedInfo):
             try:
-                playerInfoForDB = (playerInfo[0], teamToIDDict[playerInfo[1]], countryInDB[playerInfo[2]], playerInfo[3])
+                playerInfoForDB = (playerInfo[0], teamToIDDict[playerInfo[1]], teamToIDDict[playerInfo[2]], playerInfo[3])
             except Exception as e:
                 logger.error(f"cannot write player into db {e}")
                 continue
@@ -127,43 +121,33 @@ def addDataToDB(pastMatchesStats):
             dbHelper.insert_stat_data(matchStats, teamToIDDict, playerToIDDict)
   
 
-
-
-
-matchIDs = scraper.getScheduledMatch()
-checkInDb(matchIDs)
-from datetime import datetime
-
-# add checkings for team & add checked team to list
-
-
-
-pastMatchesStats = asyncio.run(getScheduledMatchStat(scraper, matchIDs))
-
-
-
-# add checkings for team and players
-checkInDb(pastMatchesStats, "player")
-checkInDb(pastMatchesStats)
-
-print(('Torreense', 'Portugal') in teamNeedInfo)
-print(('Torreense', 'Portugal') in teamChecked)
-# print(('Weverton', datetime.fromisoformat('1987-12-13T00:00:00')) in playerNeedInfo)
-print(teamToIDDict)
-
-# import json
-
 def serialize_datetime(obj):
     if isinstance(obj, datetime):
         return obj.isoformat()  # Convert datetime to ISO 8601 string format
     raise TypeError(f"Type {type(obj)} not serializable")
 
 
+def getScheduledMatchStat():
+    matchIDs = scraper.getScheduledMatch(1)
+    if matchIDs:
+        checkInDb(matchIDs)
 
-fp = open("jsonData.json", "w")
-json.dump(pastMatchesStats, fp, indent = 6, default=serialize_datetime)
+        # check db for past stats before getting new data
 
-# print(playerNeedInfo)
-addDataToDB(pastMatchesStats)
-# dbHelper.insert_player({"name":"Jordan Pickford", "team_id":"5", "country_id":"5", "birth_date": datetime.now()})
-# dbHelper.insert_team({"team":"test club", "country": "test country"})
+        pastMatchesStats = asyncio.run(scrapeScheduledMatchStat(scraper, matchIDs))
+
+
+
+        # add checkings for team and players
+        checkInDb(pastMatchesStats, "player")
+        checkInDb(pastMatchesStats)
+
+        fp = open("jsonData.json", "w")
+        json.dump(pastMatchesStats, fp, indent = 6, default=serialize_datetime)
+
+        # print(playerNeedInfo)
+        addDataToDB(pastMatchesStats)
+        # dbHelper.insert_player({"name":"Jordan Pickford", "team_id":"5", "country_id":"5", "birth_date": datetime.now()})
+        # dbHelper.insert_team({"team":"test club", "country": "test country"})
+
+getScheduledMatchStat()
