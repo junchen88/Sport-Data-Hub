@@ -123,10 +123,19 @@ class Scraper():
 
         pastMatchURL = self.TEAMURL + str(teamID) + f"/events/last/{pageNum}"
         response = await asession.get(pastMatchURL, stream=True)
+        # check for request status
+        if response.status_code != 200:
+            # log instead!
+            try:
+                self.logger.error(f"failed to obtain past 5 matches data for team {pastMatchURL}: {response.status_code} {STATUS_MESSAGES[response.status_code]}")
+            except:
+                self.logger.error(f"failed to obtain past 5 matches data for team {pastMatchURL}: {response.status_code}")
+
+            return {}
         dataJson = response.json()
         
         numberOfMatchesWithData = 0
-
+        
         if len(dataJson["events"]) >= 5:
             # -6 since we want 5 results as range stops at target-1
             # latest result is at page 0 and at the end
@@ -134,7 +143,7 @@ class Scraper():
                 match = dataJson["events"][i]
                 if "status" in match.keys():
                     numberOfMatchesWithData = self.findMatchWithPlayerStat(match, matchIDs, teamName, numberOfMatchesWithData)
-               
+                
                 if numberOfMatchesWithData >= 5:
                     
                     break #stop loop if we got at least 5 data
@@ -172,33 +181,37 @@ class Scraper():
         
 
 
-    def getScheduledMatch(self):
-        date = datetime.now() + timedelta(days=1)
-        date = date.strftime("%Y-%m-%d")
-        requestURL      = self.SCHEDULEMATCHURL + date
-        response = self.session.get(requestURL)
-        dictData = response.json()
+    def getScheduledMatch(self, days):
+        if days > 2 and days < 0:
+            self.logger.error("days parameter should not exceed 2 as scheduled match may not be accurate. Aborting get scheduled match...")
+            return None
+        else:
+            date = datetime.now() + timedelta(days=days)
+            date = date.strftime("%Y-%m-%d")
+            requestURL      = self.SCHEDULEMATCHURL + date
+            response = self.session.get(requestURL)
+            dictData = response.json()
 
-        matchIDs = []
-        for match in dictData['events']:
-            dateStr = strftime('%Y-%m-%d', localtime(match["startTimestamp"]))
-            if dateStr == date:
-                self.findScheduledMatchWithPlayerStats(match, matchIDs)
+            matchIDs = []
+            for match in dictData['events']:
+                dateStr = strftime('%Y-%m-%d', localtime(match["startTimestamp"]))
+                if dateStr == date:
+                    self.findScheduledMatchWithPlayerStats(match, matchIDs)
 
-        requestURL = requestURL + "/inverse"
-        response = self.session.get(requestURL)
-        moreData = response.json()
+            requestURL = requestURL + "/inverse"
+            response = self.session.get(requestURL)
+            moreData = response.json()
 
-        for match in moreData['events']:
-            dateStr = strftime('%Y-%m-%d', localtime(match["startTimestamp"]))
-            if dateStr == date:
-                self.findScheduledMatchWithPlayerStats(match, matchIDs)
+            for match in moreData['events']:
+                dateStr = strftime('%Y-%m-%d', localtime(match["startTimestamp"]))
+                if dateStr == date:
+                    self.findScheduledMatchWithPlayerStats(match, matchIDs)
 
-        print(len(matchIDs))
+            print(len(matchIDs))
 
 
-        return matchIDs # return this to caller function to get historical data from database
-                        # if data doesn't exist or not updated, call getPast5Matches function
+            return matchIDs # return this to caller function to get historical data from database
+                            # if data doesn't exist or not updated, call getPast5Matches function
 
 
     async def getPlayerInformation(self, asession, playerID):
@@ -336,21 +349,14 @@ class Scraper():
                         
                         # when player doesn't have the statistics keyword
                         else:
-                            player_dict["minutesPlayed"] = 'NA'
-                            player_dict["shot made"] = 'NA'
-                            player_dict["shot on target"] = 'NA'
-                            player_dict["assist"] = 'NA'
-                            player_dict["goal scored"] = 'NA'
-                            player_dict["fouls"] = 'NA'
-                            player_dict["foul won (was fouled)"] = 'NA'
-                            player_dict["shot saved"] = 'NA'
+                            raise KeyError("no statistic keyword for player = no statistic")
 
                         # add to match player dict
                         all_player_stats[team][player["player"]["name"]] = player_dict
 
 
         except Exception as e:
-            print(f"failed to obtain player stats", repr(e))
+            self.logger.error(f"failed to obtain player stats {repr(e)}, removing the match {matchID}...")
             all_player_stats = {}
 
         return all_player_stats
@@ -501,12 +507,16 @@ class Scraper():
         tasks = [self.getMatchStat(asession, matchID) for matchID in matchIDs]
         past_match_stat = await async_tqdm.gather(*tasks, desc="getting stats for each match")
         
-
+        updated_past_match_stat = []
         for i , match in enumerate(matchIDs):
             if past_match_stat[i]:
-                past_match_stat[i]["player_stats"] = playerStats[i]
+                if playerStats[i]:
+                    past_match_stat[i]["player_stats"] = playerStats[i]
+                    updated_past_match_stat.append(past_match_stat[i])
+                else:
+                    continue
 
-        return past_match_stat
+        return updated_past_match_stat
 
         
 
