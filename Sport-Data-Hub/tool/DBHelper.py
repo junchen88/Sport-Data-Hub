@@ -28,6 +28,16 @@ class DBHelper():
         self.logger = logger
 
     def insert_player(self, data):
+        """
+        Insert player
+
+        Parameters:
+            - data: tuple containing player info - name, team id, country id, birth date
+
+        Returns:
+            - newPlayerID: ID of the inserted item
+            - None: insert fail
+        """
         session = Session(self.engine)
         try:
             player = self.Player(
@@ -53,6 +63,16 @@ class DBHelper():
         
 
     def insert_team(self, data):
+        """
+        Insert team/country into db
+
+        Parameters:
+            - data: tuple containing team info - (team_name, country)
+
+        Returns:
+            - newTeamID: ID of the inserted team
+            - None: insert fail
+        """
         session = Session(self.engine)
         try:
             team = self.Team(
@@ -74,6 +94,14 @@ class DBHelper():
 
     # Insert function
     def insert_stat_data(self, data, teamToIDDict, playerToIDDict):
+        """
+        Insert match and player stats into the db
+
+        Parameters:
+            - data (list of dict): a list of dict containing match info, match stats, and player stats
+            - teamToIDDict: mapping dict of team name to its db ID
+            - playerToIDDIct: mapping dict of (player name, birthdate) to its db ID
+        """
         matchID = None
         try:
             session = Session(self.engine)
@@ -103,7 +131,7 @@ class DBHelper():
 
             session.add(match)
             session.commit()
-            matchID = match.match_id
+            matchID = match.match_id # obtain added match's ID after the commit
 
 
         except IntegrityError as e:
@@ -111,17 +139,15 @@ class DBHelper():
             self.logger.error(f"IntegrityError occurred: The item already exists or violates a constraint.\nError details: {e.orig}")
 
         try:
-            if matchID == None:
-                # query for the match ID
-                pass
+            if matchID != None:
 
-            else:
-                # Insert PlayerStats
+                # Insert PlayerStats if there are player stats
                 player_stats_data = data['player_stats']
                 if player_stats_data:
                     for team, playerStats in player_stats_data.items():
                         for player_name, stats in playerStats.items():
-                            # player = session.query(self.Player).filter_by(player_name=player_name).first()  # Example query
+
+                            # get the player's db ID
                             playerID = playerToIDDict[(player_name, stats["birth_date"])]
 
 
@@ -160,6 +186,19 @@ class DBHelper():
         #     session.close()
 
     def checkItemInDB(self, countryInDB:dict=None, countryNotInDB:set=None, playerCountry=None, **kwargs):
+        """
+        Check whether item is in db
+
+        Parameters:
+            - countryInDB (or None): dict containing countries/teams in db
+            - countryNotInDB (or None): dict containing countries/teams not in db
+            - playerCountry (or None): player's country
+            - kwargs: contains the required data of the item 
+        
+        Returns:
+            - False: when item is not in db
+            - id: the item's id inside the db
+        """
         if len(kwargs) != 3:
             self.logger.error(f"Incorrect number of parameters in DBHelper: at least 3 is needed")
             return False
@@ -182,6 +221,7 @@ class DBHelper():
                 
                     countryResult = countryQuery.all()
                     
+                    # if country is in the db, we record its id if country name is not in the mapping dict
                     if countryResult:
                         for aCountry in countryResult:
                             if aCountry.team_name not in countryInDB.keys():
@@ -191,16 +231,16 @@ class DBHelper():
                     else:
                         countryNotInDB.add((playerCountry,playerCountry))
                     
-
+            # create query using kwargs except the value with key "table"
             for key, value in kwargs.items():
                 if key != "table":
                     query = query.filter_by(**{key:value})
                 
-
+            # db query
             result = query.all()
 
                 
-
+            # 1 player/team is found in the db
             if len(result) == 1:
                 
                 id = result[0].player_id if parameter == "player" else result[0].team_id
@@ -208,6 +248,7 @@ class DBHelper():
                 session.close()
                 return id
 
+            # multiple item are found
             elif len(result) > 1:
                 pri = []
                 for r in result:
@@ -217,6 +258,7 @@ class DBHelper():
                 session.close()
                 return False
 
+            # no item found
             else:
                 session.commit()
                 session.close()
