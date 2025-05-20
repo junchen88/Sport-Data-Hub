@@ -1,14 +1,14 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func, or_
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.automap import automap_base
-from sqlalchemy.ext.automap import automap_base
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy import create_engine
 import os
 from django.conf import settings
 import datetime
 import logging
 from sqlalchemy.exc import IntegrityError
+import pandas as pd
 
 class DBHelper():
     def __init__(self, logger:logging.Logger):
@@ -272,4 +272,135 @@ class DBHelper():
             session.close()
             return False
 
+    def getTeam(self, teamName, country):
 
+        session = Session(self.engine)
+        try:
+            table = self.Team
+            result = session.query(table).filter_by(team_name=teamName, country=country).first()
+            
+            if result:
+                team = {
+                    "team_id":result.team_id, 
+                    "team_name":result.team_name, 
+                    "country":result.country
+                    }
+                session.close()
+                return team
+            else:
+                session.close()
+                return None
+        except Exception as e:
+            session.rollback()
+            session.close()
+            self.logger.error(f"failed to query for team at getTeam: {repr(e)}")
+            return None
+
+
+    # def aggregate_group(self, group):
+    #     #TODO drop columns, keep only columns related to player stats + more
+    #     print(group.columns)
+    #     a = self.Match.__table__.c
+    #     home_players = {name: group[group['player_name'] == name].drop(columns=['player_name']).to_dict(orient='records')[0]
+    #                 for name in group['player_name'][group['team_id'] == group['homeTeam_id']].unique()}
+    
+    #     away_players = {name: group[group['player_name'] == name].drop(columns=['player_name']).to_dict(orient='records')[0]
+    #                 for name in group['player_name'][group['team_id'] == group['awayTeam_id']].unique()}
+
+    #     return pd.Series({"players": {group["home_team_name"].iloc[0]: home_players, group["away_team_name"].iloc[0]: away_players}})
+
+
+    def aggregate_group(self, group):
+        # Define relevant player stat columns
+        playerStatCol = [col.name for col in self.PlayerStats.__table__.c]
+
+        # player_stat_columns = [col for col in group.columns if col not in playerStatCol]
+        # print(player_stat_columns)
+        # keep wanted columns upfront
+        group = group[['player_name',"team_id","homeTeam_id","awayTeam_id","home_team_name","away_team_name"] + playerStatCol]
+        # Convert data to a dictionary indexed by player_name
+        player_data = group.set_index('player_name').to_dict(orient='index')
+
+        # Separate home and away players
+        home_players = {
+            # filter out key "homeTeam_id" and "awayTeam_id" (not needed in playerstats)
+            # for player name in the player_name column where the team id is the home team, make it as the new
+            # dict key with value as the player stat value without the "homeTeam_id" and "awayTeam_id" 
+            name: {key: val for key, val in player_data[name].items() if key not in ["homeTeam_id", "awayTeam_id"]}
+            for name in group['player_name'][group['team_id'] == group['homeTeam_id']].unique()
+        }
+        away_players = {
+            name: {key: val for key, val in player_data[name].items() if key not in ["homeTeam_id", "awayTeam_id"]}
+            for name in group['player_name'][group['team_id'] == group['awayTeam_id']].unique()
+        }
+
+        # away_players = {name: player_data[name] for name in group['player_name'][group['team_id'] == group['awayTeam_id']].unique()}
+
+        # Construct the result as a Pandas Series
+        result = pd.Series({
+            "players": {
+                group["home_team_name"].iloc[0]: home_players,
+                group["away_team_name"].iloc[0]: away_players
+            }
+        })
+
+        return result
+
+
+    def getTeamPastMatch(self, teamInfo, noOfMatches:int=None, year:int=None):
+
+        team = self.getTeam(teamInfo[0], teamInfo[1])
+        session = Session(self.engine)
+        
+        try:
+            if team:
+                # Create aliases for the Team table to join it twice (once for homeTeam and once for awayTeam)
+                HomeTeam = aliased(self.Team, name='home_team')
+                AwayTeam = aliased(self.Team, name='away_team')
+                # uses the Core layer and returns raw data rows.
+                # so we can convert it to dict later easily
+                query = session.query(
+                    self.PlayerStats.__table__, 
+                    self.Player.__table__, 
+                    self.Match.__table__, 
+                    HomeTeam.team_name.label('home_team_name'), # we want team name only here
+                    AwayTeam.team_name.label('away_team_name')
+                )
+                query = query.select_from(self.PlayerStats)
+                query = query.join(self.Player)
+                query = query.join(self.Match)
+                
+                query = query.filter(or_(self.Match.homeTeam_id==team["team_id"], self.Match.awayTeam_id==team["team_id"]))
+                query = query.join(HomeTeam, self.Match.homeTeam_id == HomeTeam.team_id)
+                query = query.join(AwayTeam, self.Match.awayTeam_id == AwayTeam.team_id)
+
+                if year:
+                    query = query.filter(func.extract("year", self.Match.date) == year)
+                
+                if noOfMatches:
+                    query = query.limit(noOfMatches)
+
+                results = query.all()
+
+                
+                allMatchesResults = {}
+                matchCol = [column.name for column in self.Match.__table__.c]
+                df = pd.DataFrame(results)
+
+                # Use DataFrame.columns.duplicated() to drop duplicate columns
+                df = df.loc[:,~df.columns.duplicated()].copy()
+                playerCol = df.groupby(matchCol).apply(self.aggregate_group).reset_index()
+
+                with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
+                    print(playerCol)
+
+
+        except Exception as e:
+            session.close()
+            self.logger.error(f"failed to get match data at getTeamPastMatch {repr(e)}")
+
+
+
+                
+        
+        
