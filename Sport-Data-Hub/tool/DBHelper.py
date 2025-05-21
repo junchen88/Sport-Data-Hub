@@ -348,7 +348,17 @@ class DBHelper():
 
 
     def getTeamPastMatch(self, teamInfo, noOfMatches:int=None, year:int=None):
+        """
+            Obtain a team's past matches information and stats
 
+            Parameters:
+                - teamInfo: tuple containing team info - (team_name, country)
+                - noOfMatches (optional): number of past matches wanted
+                - year (optional): the oldest year wanted
+            
+            Returns:
+                - pastMatchesStat: dict containing past matches information and stats including match and players stats
+        """
         team = self.getTeam(teamInfo[0], teamInfo[1])
         session = Session(self.engine)
         
@@ -375,7 +385,7 @@ class DBHelper():
                 query = query.join(AwayTeam, self.Match.awayTeam_id == AwayTeam.team_id)
 
                 if year:
-                    query = query.filter(func.extract("year", self.Match.date) == year)
+                    query = query.filter(func.extract("year", self.Match.date) >= year)
                 
                 if noOfMatches:
                     query = query.limit(noOfMatches)
@@ -389,16 +399,49 @@ class DBHelper():
 
                 # Use DataFrame.columns.duplicated() to drop duplicate columns
                 df = df.loc[:,~df.columns.duplicated()].copy()
-                playerCol = df.groupby(matchCol).apply(self.aggregate_group).reset_index()
+                pastMatchesStat = df.groupby(matchCol).apply(self.aggregate_group).reset_index()
 
                 with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
-                    print(playerCol)
+                    print(pastMatchesStat)
+                
+                return pastMatchesStat
 
 
         except Exception as e:
             session.close()
             self.logger.error(f"failed to get match data at getTeamPastMatch {repr(e)}")
+            return None
 
+    def getScheduledMatch(self, date:datetime.date):
+
+        session = Session(self.engine)
+        # Create aliases for the Team table to join it twice (once for homeTeam and once for awayTeam)
+        HomeTeam = aliased(self.Team, name='home_team')
+        AwayTeam = aliased(self.Team, name='away_team')
+        try:
+            query = session.query(self.Match,HomeTeam,AwayTeam)
+            query = query.filter_by(date=date)
+
+            query = query.join(HomeTeam, self.Match.homeTeam_id == HomeTeam.team_id)
+            query = query.join(AwayTeam, self.Match.awayTeam_id == AwayTeam.team_id)
+
+            result = query.all()
+            matches_dict = [
+            {
+                **{key: value for key, value in match.__dict__.items() if key != "_sa_instance_state"},
+                "home_team": {"country": home_team.country, "name": home_team.team_name},
+                "away_team": {"country": away_team.country, "name": away_team.team_name}
+            }
+            for match, home_team, away_team in result
+            ]
+            print(matches_dict)
+            return matches_dict
+
+        except Exception as e:
+            session.rollback()
+            session.close()
+            self.logger.error(f"failed to query for team at getScheduledMatch: {repr(e)}")
+            return None
 
 
                 
