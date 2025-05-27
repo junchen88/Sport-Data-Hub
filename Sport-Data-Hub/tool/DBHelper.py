@@ -412,36 +412,36 @@ class DBHelper():
             self.logger.error(f"failed to get match data at getTeamPastMatch {repr(e)}")
             return None
 
-    def getScheduledMatch(self, date:datetime.date):
+    # def getScheduledMatch(self, date:datetime.date):
 
-        session = Session(self.engine)
-        # Create aliases for the Team table to join it twice (once for homeTeam and once for awayTeam)
-        HomeTeam = aliased(self.Team, name='home_team')
-        AwayTeam = aliased(self.Team, name='away_team')
-        try:
-            query = session.query(self.Match,HomeTeam,AwayTeam)
-            query = query.filter_by(date=date)
+    #     session = Session(self.engine)
+    #     # Create aliases for the Team table to join it twice (once for homeTeam and once for awayTeam)
+    #     HomeTeam = aliased(self.Team, name='home_team')
+    #     AwayTeam = aliased(self.Team, name='away_team')
+    #     try:
+    #         query = session.query(self.Match,HomeTeam,AwayTeam)
+    #         query = query.filter_by(date=date)
 
-            query = query.join(HomeTeam, self.Match.homeTeam_id == HomeTeam.team_id)
-            query = query.join(AwayTeam, self.Match.awayTeam_id == AwayTeam.team_id)
+    #         query = query.join(HomeTeam, self.Match.homeTeam_id == HomeTeam.team_id)
+    #         query = query.join(AwayTeam, self.Match.awayTeam_id == AwayTeam.team_id)
 
-            result = query.all()
-            matches_dict = [
-            {
-                **{key: value for key, value in match.__dict__.items() if key != "_sa_instance_state"},
-                "home_team": {"country": home_team.country, "name": home_team.team_name},
-                "away_team": {"country": away_team.country, "name": away_team.team_name}
-            }
-            for match, home_team, away_team in result
-            ]
-            print(matches_dict)
-            return matches_dict
+    #         result = query.all()
+    #         matches_dict = [
+    #         {
+    #             **{key: value for key, value in match.__dict__.items() if key != "_sa_instance_state"}, # remove orm metadata
+    #             "home_team": {"country": home_team.country, "name": home_team.team_name},
+    #             "away_team": {"country": away_team.country, "name": away_team.team_name}
+    #         }
+    #         for match, home_team, away_team in result
+    #         ]
+    #         print(matches_dict)
+    #         return matches_dict
 
-        except Exception as e:
-            session.rollback()
-            session.close()
-            self.logger.error(f"failed to query for team at getScheduledMatch: {repr(e)}")
-            return None
+    #     except Exception as e:
+    #         session.rollback()
+    #         session.close()
+    #         self.logger.error(f"failed to query for team at getScheduledMatch: {repr(e)}")
+    #         return None
 
 
                 

@@ -4,7 +4,7 @@ import logging
 import asyncio
 from tqdm.asyncio import tqdm as async_tqdm
 import json
-from tool import DBHelper
+from tool import DBHelper, scrape_config
 from tqdm import tqdm
 from datetime import datetime
 
@@ -25,6 +25,8 @@ playerNeedInfo = set() #to store the players that is not in db
 teamToIDDict = {}
 playerToIDDict = {}
 
+SCHEDULEDMATCHES = {}
+
 # scrape past matches for each team, default no of matches = 5
 # read db and get data first, if not use scraper.getPast5matches
 async def scrapeScheduledMatchStat(scraper:st.Scraper, scheduledMatchesInfos):
@@ -41,12 +43,19 @@ async def scrapeScheduledMatchStat(scraper:st.Scraper, scheduledMatchesInfos):
     """
     asession = AsyncHTMLSession()
     
+    # Humanize request
+    #--------------------------------------------------------
+    # Fill queue with 3 slots to control execution
+    queue = asyncio.Queue()
+    for _ in range(scrape_config.QUEUE_SLOTS):
+        queue.put_nowait(True)
+    #-------------------------------------------------------
     # get past 5 matches for each new team that has not enough data
     pageNum = 0
-    tasks = [scraper.getPast5Matches(asession, match["home_id"], match["home"], pastMatchInfo=None, pageNum=pageNum) for match in scheduledMatchesInfos]
-    tasks.extend([scraper.getPast5Matches(asession, match["away_id"], match["home"], pastMatchInfo=None, pageNum=pageNum) for match in scheduledMatchesInfos])
+    tasks = [scraper.getPast5Matches(asession, match["home_id"], match["home"], pastMatchInfo=None, pageNum=pageNum, queue=queue) for match in scheduledMatchesInfos]
+    tasks.extend([scraper.getPast5Matches(asession, match["away_id"], match["home"], pastMatchInfo=None, pageNum=pageNum, queue=queue) for match in scheduledMatchesInfos])
     allPast5MatchIDs = await async_tqdm.gather(*tasks, desc="getting past 5 matches info")
-    # print(allPast5MatchIDs)
+    # print(allPast5MatchIDs)    
 
     # combine all the matchinfo result into one list
     teamPastMatchID = []
@@ -55,7 +64,7 @@ async def scrapeScheduledMatchStat(scraper:st.Scraper, scheduledMatchesInfos):
             teamPastMatchID.extend(matchIDs)
 
     # fetch all stats for each match such as match and player stats
-    pastMatchesStats = await scraper.getAllMatchCompleteStat(teamPastMatchID, asession)
+    pastMatchesStats = await scraper.getAllMatchCompleteStat(teamPastMatchID, asession, queue)
 
     await asession.close()
     return pastMatchesStats
@@ -142,7 +151,7 @@ def addDataToDB(pastMatchesStats):
 
     # add team into db and create team name -> id mapping
     if teamNeedInfo:
-        for teamInfo in teamNeedInfo:
+        for teamInfo in tqdm(teamNeedInfo, desc="Writing team info to db"):
             # record its id
             teamId = dbHelper.insert_team(teamInfo)
             if teamId is not None:
@@ -150,7 +159,7 @@ def addDataToDB(pastMatchesStats):
 
     # add player into db and create player name, birthdate -> id mapping
     if playerNeedInfo:
-        for playerInfo in tqdm(playerNeedInfo):
+        for playerInfo in tqdm(playerNeedInfo, desc="Writing player info to db"):
             try:
                 playerInfoForDB = (playerInfo[0], teamToIDDict[playerInfo[1]], teamToIDDict[playerInfo[2]], playerInfo[3])
             except Exception as e:
@@ -163,7 +172,7 @@ def addDataToDB(pastMatchesStats):
                 playerToIDDict[(playerInfo[0], playerInfo[3])] = playerID
             
     # insert player and match stat data
-    for matchStats in pastMatchesStats:
+    for matchStats in tqdm(pastMatchesStats, desc="Writing match stat to db"):
         if matchStats:
             dbHelper.insert_stat_data(matchStats, teamToIDDict, playerToIDDict)
   
@@ -192,6 +201,7 @@ def getScheduledMatchStat(day):
     """
     matchesInfos = scraper.getScheduledMatch(day)
     if matchesInfos:
+        SCHEDULEDMATCHES = matchesInfos
         checkInDb(matchesInfos)
 
         # check db for past stats before getting new data
@@ -213,4 +223,4 @@ def getScheduledMatchStat(day):
         # dbHelper.insert_team({"team":"test club", "country": "test country"})
         scraper.closeSession()
 
-getScheduledMatchStat(1)
+# getScheduledMatchStat(1)

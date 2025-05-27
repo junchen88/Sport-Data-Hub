@@ -9,6 +9,8 @@ from tqdm.asyncio import tqdm as async_tqdm
 import asyncio
 import webbrowser
 import logging
+from tool import scrape_config
+import random
 
 # Dictionary mapping status codes to messages
 STATUS_MESSAGES = {
@@ -126,7 +128,7 @@ class Scraper():
             return numberOfMatchesWithData
 
 
-    async def getPast5Matches(self, asession, teamID, teamName, pastMatchInfo, pageNum):
+    async def getPast5Matches(self, asession, teamID, teamName, pastMatchInfo, pageNum, queue):
         """
         If database doesn't have the latest H2H match, it will need to call this function to
         get the latest 5 matches data for the team teamName
@@ -142,45 +144,70 @@ class Scraper():
             - pastMatchInfo: dict of team name as key with list of dict containing match infos as value
         
         """
-        # init dict to store result
-        if pastMatchInfo is None:
-            pastMatchInfo = {teamName:[]}
+        try:
+            # humanize the requests
+            #--------------------------------------------------------------------------
+            used_queue_slot = False  # Track whether we acquired a queue slot
+            if pageNum == 0: # Only acquire queue slot for the first request, not for recursion
+                await queue.get()
+                used_queue_slot = True
+                print("get")
+            delay = random.uniform(scrape_config.DELAY_RANGE[0],scrape_config.DELAY_RANGE[1])
+            await asyncio.sleep(delay)
+            headers = scrape_config.HEADERS
+            
+            #------------------------------------------------------------------------------
+            
+            # init dict to store result
+            if pastMatchInfo is None:
+                pastMatchInfo = {teamName:[]}
 
-        # request for data
-        pastMatchURL = self.TEAMURL + str(teamID) + f"/events/last/{pageNum}"
-        response = await asession.get(pastMatchURL, stream=True)
-        # check for request status
-        if response.status_code != 200:
-            # log instead!
-            try:
-                self.logger.error(f"failed to obtain past 5 matches data for team {pastMatchURL}: {response.status_code} {STATUS_MESSAGES[response.status_code]}")
-            except:
-                self.logger.error(f"failed to obtain past 5 matches data for team {pastMatchURL}: {response.status_code}")
+            # request for data
+            pastMatchURL = self.TEAMURL + str(teamID) + f"/events/last/{pageNum}"
+            response = await asession.get(pastMatchURL, stream=True, headers=headers)
+            # check for request status
+            if response.status_code != 200:
+                # log instead!
+                try:
+                    self.logger.error(f"failed to obtain past 5 matches data for team {pastMatchURL}: {response.status_code} {STATUS_MESSAGES[response.status_code]}")
+                except:
+                    self.logger.error(f"failed to obtain past 5 matches data for team {pastMatchURL}: {response.status_code}")
 
-            return {}
-        dataJson = response.json()
-        
-        numberOfMatchesWithData = 0 # used to track the number of matches with stats, we use it as a counter to stop recursive function
-        
-        if len(dataJson["events"]) >= 5:
-            # -6 since we want 5 results as range stops at target-1
-            # latest result is at page 0 and at the end
-            for i in range(len(dataJson["events"])-1, -1, -1):
-                match = dataJson["events"][i]
-                if "status" in match.keys():
-                    numberOfMatchesWithData = self.findMatchWithPlayerStat(match, pastMatchInfo, teamName, numberOfMatchesWithData)
-                
-                if numberOfMatchesWithData >= 5:
+                return {}
+            dataJson = response.json()
+            
+            numberOfMatchesWithData = 0 # used to track the number of matches with stats, we use it as a counter to stop recursive function
+            
+            if len(dataJson["events"]) >= 5:
+                # -6 since we want 5 results as range stops at target-1
+                # latest result is at page 0 and at the end
+                for i in range(len(dataJson["events"])-1, -1, -1):
+                    match = dataJson["events"][i]
+                    if "status" in match.keys():
+                        numberOfMatchesWithData = self.findMatchWithPlayerStat(match, pastMatchInfo, teamName, numberOfMatchesWithData)
                     
-                    break #stop loop if we got at least 5 data
+                    if numberOfMatchesWithData >= 5:
+                        
+                        break #stop loop if we got at least 5 data
 
 
+            
+            # go to the next page and get more data if possible
+            if numberOfMatchesWithData < 5 and dataJson.get("hasNextPage", False):
+                pageNum += 1
+                await self.getPast5Matches(asession, teamID, teamName, pastMatchInfo, pageNum, queue)
         
-        # go to the next page and get more data if possible
-        if numberOfMatchesWithData < 5 and dataJson.get("hasNextPage", False):
-            pageNum += 1
-            await self.getPast5Matches(asession, teamID, teamName, pastMatchInfo, pageNum)
-        
+        except Exception as e:
+            self.logger.error(f"failed to obtain past 5 matches data for team: {repr(e)}")
+
+        finally:
+            if used_queue_slot:  # Only release queue slot if `queue.get()` was used
+                queue.task_done()
+            
+            # Refill slot
+            while queue.empty():
+                queue.put_nowait(True)
+
         return pastMatchInfo
 
 
@@ -324,7 +351,7 @@ class Scraper():
             return {}
         
 
-    async def getPlayerMatchStat(self, asession, matchInfo):
+    async def getPlayerMatchStat(self, asession, matchInfo, queue):
         """
         Get player statistic such as shot made, shot on target, assist, goal scored, fouls, was fouled, shot saved if available
         
@@ -337,9 +364,19 @@ class Scraper():
             {player:{playerid, matchInfo, shot on target, assist, goal scored, fouls, was fouled, shot saved if available}, ...}
             {} if not valid
         """
+        # humanize the requests
+        #--------------------------------------------------------------------------
+
+        await queue.get()
+
+        delay = random.uniform(scrape_config.DELAY_RANGE[0],scrape_config.DELAY_RANGE[1])
+        await asyncio.sleep(delay)
+        headers = scrape_config.HEADERS
+        
+        #------------------------------------------------------------------------------
         lineupPart = matchInfo["id"] + "/lineups"
         lineupURL = self.EVENTURL + lineupPart
-        response = await asession.get(lineupURL, stream=True)
+        response = await asession.get(lineupURL, stream=True, headers=headers)
         
 
         # check for link validity, league such as Champions League Qualification
@@ -435,9 +472,16 @@ class Scraper():
             self.logger.error(f"failed to fetch player stats {repr(e)}, removing the match {identifier}...")
             all_player_stats = {}
 
-        return all_player_stats
+        finally:
+            queue.task_done()
+            
+            # Refill slot
+            while queue.empty():
+                queue.put_nowait(True)
 
-    async def getMatchStat(self, asession, matchInfo):
+            return all_player_stats
+
+    async def getMatchStat(self, asession, matchInfo, queue):
         """
         Get overall match statistic such as team shot made, team shot on target, corner, offside, fouls, yellow/red cards, 
         for the whole match, 1st half, and 2nd half
@@ -449,128 +493,152 @@ class Scraper():
             - match_stats (dict): a dictionary containing the match id and the overall match statistic as described above as value
             {match id: {stats}, ...}
         """
-        # fetch data
-        statPart = matchInfo["id"] + "/statistics"
-        lineupURL = self.EVENTURL + statPart
-        response = await asession.get(lineupURL, stream=True)
 
-        # init and populate match stat dict
-        match_stats = {}
-        match_stats["home"] = matchInfo["home"]
-        match_stats["away"] = matchInfo["away"]
-        match_stats["home_country"] = matchInfo["home_country"]
-        match_stats["away_country"] = matchInfo["away_country"]
-        match_stats["date"] =  datetime.utcfromtimestamp(matchInfo["startTimestamp"])
-        match_stats["league"] = matchInfo["league"]
+        # humanize the requests
+        #--------------------------------------------------------------------------
 
-        requiredInformationCount = 0            # to keep count of information required
+        await queue.get()
 
-        # if request is successful
-        if response.status_code == 200:
-            allMatchStats = response.json()
-            customID = matchInfo["customId"]
-            id = matchInfo["id"]
-            slug = matchInfo["slug"]
-            matchID = f"{customID}_{id}_{slug}"
+        delay = random.uniform(scrape_config.DELAY_RANGE[0],scrape_config.DELAY_RANGE[1])
+        await asyncio.sleep(delay)
+        headers = scrape_config.HEADERS
+        
+        #------------------------------------------------------------------------------
 
-            periodPrefix = ""                   # to store the prefix 1ST/2ND/etc (match period)
-            match_stats["match id"] = matchID
-            
-            # loop through the match time period (eg 1st half/2nd half/etc)
-            for matchStats in allMatchStats["statistics"]:
-                if matchStats["period"] != "ALL":
-                    periodPrefix = matchStats["period"] + "_"
+        try:
+            # fetch data
+            statPart = matchInfo["id"] + "/statistics"
+            lineupURL = self.EVENTURL + statPart
+            response = await asession.get(lineupURL, stream=True, headers=headers)
 
-                else:
-                    periodPrefix = ""           # do not add prefix if it is ALL, which means full time
-                    
-                homePrefix = periodPrefix + "home_"
-                awayPrefix = periodPrefix + "away_"
+            # init and populate match stat dict
+            match_stats = {}
+            match_stats["home"] = matchInfo["home"]
+            match_stats["away"] = matchInfo["away"]
+            match_stats["home_country"] = matchInfo["home_country"]
+            match_stats["away_country"] = matchInfo["away_country"]
+            match_stats["date"] =  datetime.utcfromtimestamp(matchInfo["startTimestamp"])
+            match_stats["league"] = matchInfo["league"]
 
-                # init required stats
-                match_stats[f"{homePrefix}corners"] = 0
-                match_stats[f"{awayPrefix}corners"] = 0
-                match_stats[f"{homePrefix}fouls"] = 0
-                match_stats[f"{awayPrefix}fouls"] = 0
-                match_stats[f"{homePrefix}yellowCards"] = 0
-                match_stats[f"{awayPrefix}yellowCards"] = 0
-                match_stats[f"{homePrefix}redCards"] = 0
-                match_stats[f"{awayPrefix}redCards"] = 0
-                match_stats[f"{homePrefix}totalShot"] = 0
-                match_stats[f"{awayPrefix}totalShot"] = 0
-                match_stats[f"{homePrefix}shotOnTarget"] = 0
-                match_stats[f"{awayPrefix}shotOnTarget"] = 0
-                match_stats[f"{homePrefix}totalSaves"] = 0
-                match_stats[f"{awayPrefix}totalSaves"] = 0
+            requiredInformationCount = 0            # to keep count of information required
 
-                # update each stat type if exists
-                for statsType in matchStats["groups"]:
-                    if statsType["groupName"] == "Match overview":
-                        requiredInformationCount += 1
+            # if request is successful
+            if response.status_code == 200:
+                allMatchStats = response.json()
+                customID = matchInfo["customId"]
+                id = matchInfo["id"]
+                slug = matchInfo["slug"]
+                matchID = f"{customID}_{id}_{slug}"
 
-                        # go though each stats under the Match Overview category
-                        # we only want corner kicks and fouls from this category
-                        for statItem in statsType["statisticsItems"]:
-                            if statItem["name"] == "Corner kicks":
-                                
-                                match_stats[f"{homePrefix}corners"] = statItem.get("home", 0)
-                                match_stats[f"{awayPrefix}corners"] = statItem.get("away", 0)
+                periodPrefix = ""                   # to store the prefix 1ST/2ND/etc (match period)
+                match_stats["match id"] = matchID
+                
+                # loop through the match time period (eg 1st half/2nd half/etc)
+                for matchStats in allMatchStats["statistics"]:
+                    if matchStats["period"] != "ALL":
+                        periodPrefix = matchStats["period"] + "_"
 
-                            elif statItem["name"] == "Fouls":
-                                match_stats[f"{homePrefix}fouls"] = statItem.get("home", 0)
-                                match_stats[f"{awayPrefix}fouls"] = statItem.get("away", 0)
-
-                            elif statItem["name"] == "Yellow cards":
-                                match_stats[f"{homePrefix}yellowCards"] = statItem.get("home", 0)
-                                match_stats[f"{awayPrefix}yellowCards"] = statItem.get("away", 0)
+                    else:
+                        periodPrefix = ""           # do not add prefix if it is ALL, which means full time
                         
-                            elif statItem["name"] == "Red cards":
-                                match_stats[f"{homePrefix}redCards"] = statItem.get("home", 0)
-                                match_stats[f"{awayPrefix}redCards"] = statItem.get("away", 0)
+                    homePrefix = periodPrefix + "home_"
+                    awayPrefix = periodPrefix + "away_"
 
-                    elif statsType["groupName"] == "Shots":
-                        requiredInformationCount += 1
+                    # init required stats
+                    match_stats[f"{homePrefix}corners"] = 0
+                    match_stats[f"{awayPrefix}corners"] = 0
+                    match_stats[f"{homePrefix}fouls"] = 0
+                    match_stats[f"{awayPrefix}fouls"] = 0
+                    match_stats[f"{homePrefix}yellowCards"] = 0
+                    match_stats[f"{awayPrefix}yellowCards"] = 0
+                    match_stats[f"{homePrefix}redCards"] = 0
+                    match_stats[f"{awayPrefix}redCards"] = 0
+                    match_stats[f"{homePrefix}totalShot"] = 0
+                    match_stats[f"{awayPrefix}totalShot"] = 0
+                    match_stats[f"{homePrefix}shotOnTarget"] = 0
+                    match_stats[f"{awayPrefix}shotOnTarget"] = 0
+                    match_stats[f"{homePrefix}totalSaves"] = 0
+                    match_stats[f"{awayPrefix}totalSaves"] = 0
 
-                        # go though each stats under the Shots category
-                        # we only want total shots and shots on target from this category
-                        for statItem in statsType["statisticsItems"]:
-                            if statItem["name"] == "Total shots":
-                                match_stats[f"{homePrefix}totalShot"] = statItem.get("home", 0)
-                                match_stats[f"{awayPrefix}totalShot"] = statItem.get("away", 0)
+                    # update each stat type if exists
+                    for statsType in matchStats["groups"]:
+                        if statsType["groupName"] == "Match overview":
+                            requiredInformationCount += 1
+
+                            # go though each stats under the Match Overview category
+                            # we only want corner kicks and fouls from this category
+                            for statItem in statsType["statisticsItems"]:
+                                if statItem["name"] == "Corner kicks":
+                                    
+                                    match_stats[f"{homePrefix}corners"] = statItem.get("home", 0)
+                                    match_stats[f"{awayPrefix}corners"] = statItem.get("away", 0)
+
+                                elif statItem["name"] == "Fouls":
+                                    match_stats[f"{homePrefix}fouls"] = statItem.get("home", 0)
+                                    match_stats[f"{awayPrefix}fouls"] = statItem.get("away", 0)
+
+                                elif statItem["name"] == "Yellow cards":
+                                    match_stats[f"{homePrefix}yellowCards"] = statItem.get("home", 0)
+                                    match_stats[f"{awayPrefix}yellowCards"] = statItem.get("away", 0)
                             
-                            elif statItem["name"] == "Shots on target":
-                                match_stats[f"{homePrefix}shotOnTarget"] = statItem.get("home", 0)
-                                match_stats[f"{awayPrefix}shotOnTarget"] = statItem.get("away", 0)
+                                elif statItem["name"] == "Red cards":
+                                    match_stats[f"{homePrefix}redCards"] = statItem.get("home", 0)
+                                    match_stats[f"{awayPrefix}redCards"] = statItem.get("away", 0)
+
+                        elif statsType["groupName"] == "Shots":
+                            requiredInformationCount += 1
+
+                            # go though each stats under the Shots category
+                            # we only want total shots and shots on target from this category
+                            for statItem in statsType["statisticsItems"]:
+                                if statItem["name"] == "Total shots":
+                                    match_stats[f"{homePrefix}totalShot"] = statItem.get("home", 0)
+                                    match_stats[f"{awayPrefix}totalShot"] = statItem.get("away", 0)
+                                
+                                elif statItem["name"] == "Shots on target":
+                                    match_stats[f"{homePrefix}shotOnTarget"] = statItem.get("home", 0)
+                                    match_stats[f"{awayPrefix}shotOnTarget"] = statItem.get("away", 0)
 
 
-                    elif statsType["groupName"] == "Goalkeeping":
-                        requiredInformationCount += 1
+                        elif statsType["groupName"] == "Goalkeeping":
+                            requiredInformationCount += 1
 
-                        # go though each stats under the Goalkeeping category
-                        # we only want total saves from this category
-                        for statItem in statsType["statisticsItems"]:
-                            if statItem["name"] == "Total saves":
-                                match_stats[f"{homePrefix}totalSaves"] = statItem.get("home", 0)
-                                match_stats[f"{awayPrefix}totalSaves"] = statItem.get("away", 0)
-                                break #exit the loop as we got the required stat already
+                            # go though each stats under the Goalkeeping category
+                            # we only want total saves from this category
+                            for statItem in statsType["statisticsItems"]:
+                                if statItem["name"] == "Total saves":
+                                    match_stats[f"{homePrefix}totalSaves"] = statItem.get("home", 0)
+                                    match_stats[f"{awayPrefix}totalSaves"] = statItem.get("away", 0)
+                                    break #exit the loop as we got the required stat already
 
-        # if request are not successful, we set stat dict as empty and log it
-        else:
-            match_stats = {}
-            customID = matchInfo["customId"]
-            id = matchInfo["id"]
-            slug = matchInfo["slug"]
-            matchID = f"{customID}_{id}_{slug}"
-            self.logger.error(f"Failed to fetch match statistic data for match {matchID}, removing it...")
+            # if request are not successful, we set stat dict as empty and log it
+            else:
+                match_stats = {}
+                customID = matchInfo["customId"]
+                id = matchInfo["id"]
+                slug = matchInfo["slug"]
+                matchID = f"{customID}_{id}_{slug}"
+                self.logger.error(f"Failed to fetch match statistic data for match {matchID}, removing it...")
 
-        # if there are not enough information, set dict as empty
-        if requiredInformationCount < 3:
-            match_stats = {}
-        return match_stats
+            # if there are not enough information, set dict as empty
+            if requiredInformationCount < 3:
+                match_stats = {}
+                
+        except Exception as e:
+            self.logger.error(f"failed to obtain match data: {e}")
+            return {}
+        finally:
+            queue.task_done()
+            
+            # Refill slot
+            while queue.empty():
+                queue.put_nowait(True)
+
+            return match_stats
                     
 
 
-    async def getAllMatchCompleteStat(self, pastMatchInfo, asession):
+    async def getAllMatchCompleteStat(self, pastMatchInfo, asession, queue):
         """
         Get overall match stat and player stat
 
@@ -584,7 +652,7 @@ class Scraper():
         """
 
         # create a list of asynchronous task to execute
-        tasks = [self.getPlayerMatchStat(asession, match) for match in pastMatchInfo]
+        tasks = [self.getPlayerMatchStat(asession, match, queue) for match in pastMatchInfo]
 
         
 
@@ -592,7 +660,7 @@ class Scraper():
         # the result is an aggregate list of returned values
         playerStats = await async_tqdm.gather(*tasks, desc="getting player stats")
 
-        tasks = [self.getMatchStat(asession, match) for match in pastMatchInfo]
+        tasks = [self.getMatchStat(asession, match, queue) for match in pastMatchInfo]
         past_match_stat = await async_tqdm.gather(*tasks, desc="getting stats for each match")
         
         # go through in the order of past match info list
