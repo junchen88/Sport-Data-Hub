@@ -12,7 +12,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (Linux; Android 12; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36"
 ]
 
-DELAY_RANGE = (2, 5)  # Randomized delay range in seconds
+DELAY_RANGE = (2, 20)  # Randomized delay range in seconds
 
 # Mimic common headers seen in real browser requests
 HEADERS = {

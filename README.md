@@ -6,3 +6,5 @@ Website for displaying stats for sports like football, AFL, etc
 2. Doesn't have venue information if using football homepage to scrape, need to go to individual matches page. Can add this if wanted, but this increases script run time
 `venue": f"{matchJsonData['venue']['stadium']['name']}, ({matchJsonData['venue']['city']['name']}, {matchJsonData['venue']['country']['name']})`
 3. Add comment, then work on check db before scraping, and check for player club status/changes
+
+now: get scheduled matches from db -> send to page -> create dropdown list -> get first list match with each team getTeamPastMatch from db -> user selects new match from list -> get its corresponding data

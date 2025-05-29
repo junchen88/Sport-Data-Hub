@@ -7,7 +7,7 @@ from rest_framework.response import Response
 # Create your views here.
 
 @api_view(['GET'])
-def getScheduledMatches(request, day):
+def returnScheduledMatches(request, day):
 
     # Check if day is within the valid range (0-7)
     try:

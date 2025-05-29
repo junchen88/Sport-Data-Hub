@@ -151,7 +151,6 @@ class Scraper():
             if pageNum == 0: # Only acquire queue slot for the first request, not for recursion
                 await queue.get()
                 used_queue_slot = True
-                print("get")
             delay = random.uniform(scrape_config.DELAY_RANGE[0],scrape_config.DELAY_RANGE[1])
             await asyncio.sleep(delay)
             headers = scrape_config.HEADERS
@@ -204,9 +203,12 @@ class Scraper():
             if used_queue_slot:  # Only release queue slot if `queue.get()` was used
                 queue.task_done()
             
-            # Refill slot
-            while queue.empty():
-                queue.put_nowait(True)
+                # Refill slot
+                if queue.empty():
+                    for _ in range(scrape_config.QUEUE_SLOTS):
+                        queue.put_nowait(True)
+                # print(queue.qsize())
+
 
         return pastMatchInfo
 
@@ -476,8 +478,11 @@ class Scraper():
             queue.task_done()
             
             # Refill slot
-            while queue.empty():
-                queue.put_nowait(True)
+            if queue.empty():
+                for _ in range(scrape_config.QUEUE_SLOTS):
+                    queue.put_nowait(True)
+            # print(queue.qsize())
+
 
             return all_player_stats
 
@@ -626,13 +631,16 @@ class Scraper():
                 
         except Exception as e:
             self.logger.error(f"failed to obtain match data: {e}")
-            return {}
+            match_stats = {}
         finally:
             queue.task_done()
             
             # Refill slot
-            while queue.empty():
-                queue.put_nowait(True)
+            if queue.empty():
+                for _ in range(scrape_config.QUEUE_SLOTS):
+                    queue.put_nowait(True)
+            # print(queue.qsize())
+
 
             return match_stats
                     

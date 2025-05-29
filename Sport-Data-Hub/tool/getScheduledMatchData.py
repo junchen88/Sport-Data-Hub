@@ -25,7 +25,6 @@ playerNeedInfo = set() #to store the players that is not in db
 teamToIDDict = {}
 playerToIDDict = {}
 
-SCHEDULEDMATCHES = {}
 
 # scrape past matches for each team, default no of matches = 5
 # read db and get data first, if not use scraper.getPast5matches
@@ -201,7 +200,6 @@ def getScheduledMatchStat(day):
     """
     matchesInfos = scraper.getScheduledMatch(day)
     if matchesInfos:
-        SCHEDULEDMATCHES = matchesInfos
         checkInDb(matchesInfos)
 
         # check db for past stats before getting new data
@@ -222,5 +220,6 @@ def getScheduledMatchStat(day):
         # dbHelper.insert_player({"name":"Jordan Pickford", "team_id":"5", "country_id":"5", "birth_date": datetime.now()})
         # dbHelper.insert_team({"team":"test club", "country": "test country"})
         scraper.closeSession()
+    return matchesInfos
 
 # getScheduledMatchStat(1)

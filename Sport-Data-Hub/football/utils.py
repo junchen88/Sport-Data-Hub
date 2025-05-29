@@ -6,8 +6,16 @@ from .models import Team, Player, Match, PlayerStats
 from .serializers import TeamSerializer, PlayerSerializer, MatchSerializer, PlayerStatsSerializer
 from django.shortcuts import get_object_or_404
 from django.db.models import Q  # Import Q object for complex queries
-
+from tool.DBHelper import DBHelper
+from tool.getScheduledMatchData import getScheduledMatchStat
 from datetime import datetime, timedelta
+
+import logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(filename='messages.log', encoding='utf-8', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+
+dbHelper = DBHelper(logger)
+SCHEDULEDMATCHES = {}
 
 def getPastFiveMatchesAndPlayersStats(team_name, country):
     team = get_object_or_404(Team, team_name=team_name, country=country)  
@@ -47,8 +55,14 @@ def getPastFiveMatchesAndPlayersStats(team_name, country):
     
 
 def getScheduledMatches(day):
+    global SCHEDULEDMATCHES
     # get matches based on date
     dateWanted = datetime.now() + timedelta(day)
-    matches = Match.objects.filter(date=dateWanted)
-    serializer = MatchSerializer(matches, many=True)
-    return Response(serializer.data)
+    dateWanted = dateWanted.date()
+    
+    if not SCHEDULEDMATCHES:
+        matches = getScheduledMatchStat(day)
+        SCHEDULEDMATCHES = matches
+
+    
+    return SCHEDULEDMATCHES
