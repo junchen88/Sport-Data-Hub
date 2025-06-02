@@ -319,19 +319,20 @@ class DBHelper():
         # keep wanted columns upfront
         group = group[['player_name',"team_id","homeTeam_id","awayTeam_id","home_team_name","away_team_name"] + playerStatCol]
         # Convert data to a dictionary indexed by player_name
-        player_data = group.set_index('player_name').to_dict(orient='index')
-
+        
+        #TODO bug - failed to get match data at getTeamPastMatch ValueError("DataFrame index must be unique for orient='index'.")
+        player_data = group.set_index('player_id').to_dict(orient='index')
         # Separate home and away players
         home_players = {
             # filter out key "homeTeam_id" and "awayTeam_id" (not needed in playerstats)
             # for player name in the player_name column where the team id is the home team, make it as the new
             # dict key with value as the player stat value without the "homeTeam_id" and "awayTeam_id" 
-            name: {key: val for key, val in player_data[name].items() if key not in ["homeTeam_id", "awayTeam_id"]}
-            for name in group['player_name'][group['team_id'] == group['homeTeam_id']].unique()
+            row[0]: {key: val for key, val in player_data[row[1]].items() if key not in ["homeTeam_id", "awayTeam_id"]}
+            for row in group.loc[group['team_id'] == group['homeTeam_id'], ['player_name', 'player_id']].itertuples(index=False)
         }
         away_players = {
-            name: {key: val for key, val in player_data[name].items() if key not in ["homeTeam_id", "awayTeam_id"]}
-            for name in group['player_name'][group['team_id'] == group['awayTeam_id']].unique()
+            row[0]: {key: val for key, val in player_data[row[1]].items() if key not in ["homeTeam_id", "awayTeam_id"]}
+            for row in group.loc[group['team_id'] == group['awayTeam_id'], ['player_name', 'player_id']].itertuples(index=False)
         }
 
         # away_players = {name: player_data[name] for name in group['player_name'][group['team_id'] == group['awayTeam_id']].unique()}
