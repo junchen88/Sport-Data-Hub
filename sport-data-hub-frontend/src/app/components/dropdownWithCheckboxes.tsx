@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect} from "react";
 
 const DropdownCheckboxes: React.FC<{ options: string[]; setSelectedOptions: (options: string[]) => void }> = ({ options, setSelectedOptions}) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -12,7 +12,11 @@ const DropdownCheckboxes: React.FC<{ options: string[]; setSelectedOptions: (opt
     );
     setSelectedOptions(selectedOptions);
   };
-  
+
+  useEffect(() => {
+    setSelectedOptions(selectedOptions); // Ensures latest update is passed
+  }, [selectedOptions]);
+
   const handleCheckAll = () => {
     if (areAllChecked) {
       setLocalSelectedOptions([]);
