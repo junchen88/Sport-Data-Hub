@@ -2,39 +2,10 @@
 
 import { useState, useEffect } from "react";
 import axios, {AxiosResponse, AxiosError} from "axios";
+import { Match, MatchDetails } from "@/app/types/interfaces";
+import  MatchDetailsTable  from "@/app/components/table"
 
 
-// Define types for the match data
-interface Match {
-  id: string;
-  leagueName:string;
-  home_team:string;
-  away_team:string;
-  home_country:string;
-  away_country:string;
-  name: string;
-  startTimeStampInMS: number;
-  date: string;
-}
-
-interface MatchDetails {
-  match_id:number,
-  date:object,
-  yellow_cards:number,
-  red_cards:number,
-  home_shots:number,
-  away_shots:number,
-  home_shots_target:number,
-  away_shots_target:number,
-  awayTeam_id:number,
-  homeTeam_id:number,
-  league:string,
-  away_corners:number,
-  away_fouls:number,
-  home_corners:number,
-  home_fouls: number,
-  players: JSON;
-}
 
 // match dropdown component
 export default function MatchDropdown() {
@@ -145,18 +116,18 @@ export default function MatchDropdown() {
 
 // Fetch match details when selected
 const MatchDetailsComponent: React.FC<{ match: Match }> = ({ match }) => {
-  const [matchData, setMatchData] = useState<MatchDetails | null>(null);
+  const [matchData, setMatchData] = useState<MatchDetails[] | null>(null);
 
   useEffect(() => {
     axios.get(`http://127.0.0.1:8000/football/api/returnTeamPastMatches/?team=${match.home_team}&country=${match.home_country}`) // Axios GET request
-      .then((response: AxiosResponse<MatchDetails>) => setMatchData(response.data)) // Axios auto-parses JSON
+      .then((response: AxiosResponse<MatchDetails[]>) => setMatchData(response.data)) // Axios auto-parses JSON
       .catch((error: AxiosError) => console.error("Error fetching matches:", error));
     }, [match]);
 
   return matchData ? (
     <div className="mt-4 p-4 bg-white shadow rounded">
       <h3 className="text-lg font-bold">Details</h3>
-      <p>{matchData.match_id}</p>
+      <MatchDetailsTable matchDetails={matchData} type={["home_shots_target"]} />
     </div>
   ) : (
     <p>Loading match details...</p>
