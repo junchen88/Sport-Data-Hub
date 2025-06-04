@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import axios, {AxiosResponse, AxiosError} from "axios";
 import { Match, MatchDetails } from "@/app/types/interfaces";
 import  MatchDetailsTable  from "@/app/components/table"
+import DropdownWithCheckboxes from "@/app/components/dropdownWithCheckboxes"
 
 
 
@@ -17,7 +18,22 @@ export default function MatchDropdown() {
   const [leagues, setLeague] = useState<string[]>([]);
   const [selectedLeague, setSelectedLeague] = useState<string>("default");
                                                                             
+  const matchDetailKeys =[
+    "yellow_cards",
+    "red_cards",
+    "home_shots",
+    "away_shots",
+    "home_shots_target",
+    "away_shots_target",
+    "away_corners",
+    "away_fouls",
+    "home_corners",
+    "home_fouls",
+    "players",
+  ]
+  const [selectedStats, setSelectedStats] = useState<string[]>([]); // ✅ Add state for selected stats
 
+  console.log(matchDetailKeys)
   useEffect(() => {
     axios.get("http://127.0.0.1:8000/football/api/returnScheduledMatches/0")
       .then((response: AxiosResponse<Match[]>) => {
@@ -54,7 +70,7 @@ export default function MatchDropdown() {
     }, []);
 
   return (
-    <div className="relative">
+    <div className="relative gap-x-4">
       <select
         onChange={(e) => {
           const match = matches.find(m => m.name === e.target.value);
@@ -107,15 +123,16 @@ export default function MatchDropdown() {
         
         }
       </select>
+      {<DropdownWithCheckboxes options={matchDetailKeys} setSelectedOptions={setSelectedStats}/>}
 
       {/* if a match is selected, render MatchDetailsComponent with matchId prop */}
-      {selectedMatch && <MatchDetailsComponent match={selectedMatch} />}
+      {selectedMatch && <MatchDetailsComponent match={selectedMatch} selectedStats={selectedStats}/>}
     </div>
   );
 }
 
 // Fetch match details when selected
-const MatchDetailsComponent: React.FC<{ match: Match }> = ({ match }) => {
+const MatchDetailsComponent: React.FC<{ match: Match; selectedStats: string[] }> = ({ match, selectedStats }) => {
   const [matchData, setMatchData] = useState<MatchDetails[] | null>(null);
 
   useEffect(() => {
@@ -124,10 +141,12 @@ const MatchDetailsComponent: React.FC<{ match: Match }> = ({ match }) => {
       .catch((error: AxiosError) => console.error("Error fetching matches:", error));
     }, [match]);
 
+    
+
   return matchData ? (
     <div className="mt-4 p-4 bg-white shadow rounded">
       <h3 className="text-lg font-bold">Details</h3>
-      <MatchDetailsTable matchDetails={matchData} type={["home_shots_target"]} />
+      <MatchDetailsTable matchDetails={matchData} type={selectedStats} />
     </div>
   ) : (
     <p>Loading match details...</p>
