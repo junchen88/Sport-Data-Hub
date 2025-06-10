@@ -17,6 +17,9 @@ export default function MatchDropdown() {
 
   const [leagues, setLeague] = useState<string[]>([]);
   const [selectedLeague, setSelectedLeague] = useState<string>("default");
+
+  const [countries, setCountries] = useState<string[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<string>("default");
                                                                             
   const matchDetailKeys =[
     "yellow_cards",
@@ -33,7 +36,6 @@ export default function MatchDropdown() {
   ]
   const [selectedStats, setSelectedStats] = useState<string[]>([]); // ✅ Add state for selected stats
 
-  console.log(matchDetailKeys)
   useEffect(() => {
     axios.get("http://127.0.0.1:8000/football/api/returnScheduledMatches/0")
       .then((response: AxiosResponse<Match[]>) => {
@@ -76,6 +78,8 @@ export default function MatchDropdown() {
           const match = matches.find(m => m.name === e.target.value);
           setSelectedMatch(match || null);
           setSelectedLeague(match ? match.leagueName : "default")
+          setCountries(match?[match.home_team, match.away_team]:[])
+          setSelectedCountry(match? match.home_country:"default")
         }}
         className="p-2 border rounded bg-gray-200"
         name="matchDropdown"
@@ -101,7 +105,6 @@ export default function MatchDropdown() {
         name="leagueDropdown" id="leagueDropdown" className="p-2 border rounded bg-gray-200"
         value={selectedLeague}
         onChange={(e) => {
-          console.log(e.target.value)
 
           setSelectedLeague(e.target.value)
           if (e.target.value === "default") {
@@ -125,14 +128,33 @@ export default function MatchDropdown() {
       </select>
       {<DropdownWithCheckboxes options={matchDetailKeys} setSelectedOptions={setSelectedStats}/>}
 
+      <select 
+        name="countryDropdown" id="countryDropdown" className="p-2 border rounded bg-gray-200"
+        value={selectedCountry}
+        onChange={(e) => {
+          setSelectedCountry(e.target.value)
+        }}
+      >
+        <option key="" value="">Select a Country/Team...</option>
+        {
+          countries.map(
+            (country) => (
+              <option key={country} value={country}>
+                {country}
+              </option>
+            )
+          )
+        }
+      </select>
+
       {/* if a match is selected, render MatchDetailsComponent with matchId prop */}
-      {selectedMatch && <MatchDetailsComponent match={selectedMatch} selectedStats={selectedStats}/>}
+      {selectedMatch && <MatchDetailsComponent match={selectedMatch} selectedStats={selectedStats} selectedCountry={selectedCountry}/>}
     </div>
   );
 }
 
 // Fetch match details when selected
-const MatchDetailsComponent: React.FC<{ match: Match; selectedStats: string[] }> = ({ match, selectedStats }) => {
+const MatchDetailsComponent: React.FC<{ match: Match; selectedStats: string[]; selectedCountry:string}> = ({ match, selectedStats, selectedCountry }) => {
   const [matchData, setMatchData] = useState<MatchDetails[] | null>(null);
 
   useEffect(() => {
@@ -146,7 +168,7 @@ const MatchDetailsComponent: React.FC<{ match: Match; selectedStats: string[] }>
   return matchData ? (
     <div className="mt-4 p-4 bg-white shadow rounded">
       <h3 className="text-lg font-bold">Details</h3>
-      <MatchDetailsTable matchDetails={matchData} type={selectedStats} />
+      <MatchDetailsTable matchDetails={matchData} type={selectedStats} homeTeam={match.home_team} awayTeam={match.away_team} selectedCountry={selectedCountry}/>
     </div>
   ) : (
     <p>Loading match details...</p>

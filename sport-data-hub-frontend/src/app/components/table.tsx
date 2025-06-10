@@ -5,15 +5,15 @@ import {MatchDetails } from "@/app/types/interfaces";
 import { Stats } from "fs";
 
 
-const MatchDetailsTable: React.FC<{matchDetails:Array<MatchDetails>; type:Array<string>}> = ({ matchDetails, type}) => {
+const MatchDetailsTable: React.FC<{matchDetails:Array<MatchDetails>; type:Array<string>; homeTeam:string; awayTeam:string; selectedCountry:string}> = ({ matchDetails, type, homeTeam, awayTeam, selectedCountry}) => {
   if (!matchDetails) return <p className="text-gray-500">No match details available.</p>;
-  {console.log(Object.keys(matchDetails[0]).filter((key) => type.includes(key)))}
   
   return (
     <table className="border-collapse border border-gray-400 w-full">
       <thead>
         <tr>
             <th className="border border-gray-300 p-2 capitalize">Label</th>
+            <th className="border border-gray-300 p-2 capitalize">Country</th>
             {Object.keys(matchDetails)
                 .map((key) => (
                 <th key={key} className="border border-gray-300 p-2 capitalize">
@@ -29,9 +29,28 @@ const MatchDetailsTable: React.FC<{matchDetails:Array<MatchDetails>; type:Array<
           .map((key) => (
           <tr key={key}>
             <td className="border border-gray-300 p-2 capitalize">{key.replace(/_/g, " ")}</td>
+            <td className="border border-gray-300 p-2 capitalize">{selectedCountry}</td>
             {matchDetails.map((match) => (
+              
+              // if selected team is home - same colour
+              key.includes("home") && match.home_team_name === selectedCountry ? 
+              <td key={match.match_id} className="border border-gray-300 p-2 bg-selectedCountry">
+                {String(match[key])} 
+              </td> :
+              // else if selected team is away - same colour
+              key.includes("away") && match.away_team_name === selectedCountry ?
+              <td key={match.match_id} className="border border-gray-300 p-2 bg-selectedCountry">
+                {String(match[key])} 
+              </td> :
+              //else if general item - not home and away specific
+              !key.includes("home") && !key.includes("away") ?
+              <td key={match.match_id} className="border border-gray-300 p-2 bg-selectedCountry">
+                {String(match[key])} 
+              </td> :
+              
+              // else other colour or no colour since it is not the selected team
               <td key={match.match_id} className="border border-gray-300 p-2">
-                {String(match[key])} {/* ✅ Populate match data */}
+                {String(match[key])}
               </td>
             ))}
           </tr>

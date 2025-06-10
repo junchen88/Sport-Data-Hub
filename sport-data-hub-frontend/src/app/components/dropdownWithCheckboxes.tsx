@@ -7,12 +7,22 @@ const DropdownCheckboxes: React.FC<{ options: string[]; setSelectedOptions: (opt
 
   const handleCheckboxChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
-    setLocalSelectedOptions(prev =>
-      prev.includes(value) ? prev.filter(opt => opt !== value) : [...prev, value]
-    );
-    setSelectedOptions(selectedOptions);
-  };
+    setLocalSelectedOptions(prev => {
+      if (value === "players" && !prev.includes("players")) {
+        
+        return ["players"]
+      }
 
+      if (prev.includes("players")) {
+
+        prev = prev.filter(opt => opt !== "players")
+        
+      }
+      return prev.includes(value) ? prev.filter(opt => opt !== value) : [...prev, value];
+    });
+    // setSelectedOptions(selectedOptions);
+ 
+  };
   useEffect(() => {
     setSelectedOptions(selectedOptions); // Ensures latest update is passed
   }, [selectedOptions]);
@@ -21,7 +31,7 @@ const DropdownCheckboxes: React.FC<{ options: string[]; setSelectedOptions: (opt
     if (areAllChecked) {
       setLocalSelectedOptions([]);
     } else {
-      setLocalSelectedOptions([...options]);
+      setLocalSelectedOptions([...options.filter(option => option !== "players")]);
     }
     setAreAllChecked(!areAllChecked);
   };
@@ -47,6 +57,7 @@ const DropdownCheckboxes: React.FC<{ options: string[]; setSelectedOptions: (opt
           <a
             onClick={handleCheckAll}
             className="block cursor-pointer text-green-600 hover:underline mb-2"
+            id="select_all_button"
           >
             {areAllChecked ? "Uncheck All" : "Check All"}
           </a>

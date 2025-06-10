@@ -27,6 +27,8 @@ export interface Match {
     away_fouls:number,
     home_corners:number,
     home_fouls: number,
+    home_team_name:string,
+    away_team_name:string,
     players: Record<string, any>; // ✅ JSON should be defined explicitly;
     [key: string]: string | number | Record<string, any>; // ✅ Ensure dynamic key indexing supports objects
   }

@@ -36,3 +36,7 @@ h2 {
 h3 {
   @apply text-xl font-medium mb-2;
 }
+
+.bg-selectedCountry{
+  @apply bg-blue-500
+}
