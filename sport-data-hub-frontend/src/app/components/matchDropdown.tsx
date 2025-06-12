@@ -155,22 +155,31 @@ export default function MatchDropdown() {
 
 // Fetch match details when selected
 const MatchDetailsComponent: React.FC<{ match: Match; selectedStats: string[]; selectedCountry:string}> = ({ match, selectedStats, selectedCountry }) => {
-  const [matchData, setMatchData] = useState<MatchDetails[] | null>(null);
+  const [homeMatchData, setHomeMatchData] = useState<MatchDetails[] | null>(null);
+  const [awayMatchData, setAwayMatchData] = useState<MatchDetails[] | null>(null);
 
   useEffect(() => {
     axios.get(`http://127.0.0.1:8000/football/api/returnTeamPastMatches/?team=${match.home_team}&country=${match.home_country}`) // Axios GET request
-      .then((response: AxiosResponse<MatchDetails[]>) => setMatchData(response.data)) // Axios auto-parses JSON
+      .then((response: AxiosResponse<MatchDetails[]>) => setHomeMatchData(response.data)) // Axios auto-parses JSON
+      .catch((error: AxiosError) => console.error("Error fetching matches:", error));
+    }, [match]);
+  
+  useEffect(() => {
+    axios.get(`http://127.0.0.1:8000/football/api/returnTeamPastMatches/?team=${match.away_team}&country=${match.away_country}`) // Axios GET request
+      .then((response: AxiosResponse<MatchDetails[]>) => setAwayMatchData(response.data)) // Axios auto-parses JSON
       .catch((error: AxiosError) => console.error("Error fetching matches:", error));
     }, [match]);
 
-    
-
+  var matchData = match.home_team === selectedCountry ? homeMatchData : match.away_team === selectedCountry ?  awayMatchData : null;
+  // console.log(awayMatchData);
   return matchData ? (
     <div className="mt-4 p-4 bg-white shadow rounded">
       <h3 className="text-lg font-bold">Details</h3>
-      <MatchDetailsTable matchDetails={matchData} type={selectedStats} homeTeam={match.home_team} awayTeam={match.away_team} selectedCountry={selectedCountry}/>
+      <MatchDetailsTable matchDetails={matchData||[]} type={selectedStats} homeTeam={match.home_team} awayTeam={match.away_team} selectedCountry={selectedCountry}/>
     </div>
-  ) : (
+  ) : selectedCountry ? (<p>Please select a country/team...</p>):
+  
+  (
     <p>Loading match details...</p>
   );
 };
