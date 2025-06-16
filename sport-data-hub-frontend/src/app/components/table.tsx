@@ -5,9 +5,54 @@ import {MatchDetails } from "@/app/types/interfaces";
 import { Stats } from "fs";
 
 
-const MatchDetailsTable: React.FC<{matchDetails:Array<MatchDetails>; type:Array<string>; homeTeam:string; awayTeam:string; selectedCountry:string}> = ({ matchDetails, type, homeTeam, awayTeam, selectedCountry}) => {
+const MatchDetailsTable: React.FC<{matchDetails:Array<MatchDetails>; type:Array<string>; selectedCountry:string; selectedPlayerStat:string}> = ({ matchDetails, type, selectedCountry, selectedPlayerStat}) => {
   if (!matchDetails) return <p className="text-gray-500">No match details available.</p>;
-  
+
+  matchDetails.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const playerNames = Object.keys(matchDetails[0].players[selectedCountry]);
+  const anyTeam = Object.keys(matchDetails[0]["players"])[0];
+  const anyKey = Object.keys(matchDetails[0]["players"][anyTeam])[0];
+  const statName = Object.keys(matchDetails[0]["players"][anyTeam][anyKey])
+    .filter(stat => !["match_id", "stat_id", "team_id", "home_team_name",	"away_team_name", "player_name"].includes(stat));
+  if (type.includes("players")) {
+    return (
+      <table className="border-collapse border border-gray-400 w-full">
+        <thead>
+          <tr>
+            <th className="border border-gray-300 p-2 capitalize">Player Name</th>
+            <th className="border border-gray-300 p-2 capitalize">Team</th>
+            
+            {Object.keys(matchDetails)
+                .map((key) => (
+                <th key={key} className="border border-gray-300 p-2 capitalize">
+                {key}
+                </th>
+            ))}            
+          </tr>
+        </thead>
+        <tbody>
+          {playerNames.map(playerName => (
+          <tr key={playerName}>
+            <td className="border border-gray-300 p-2">{playerName}</td>
+            <td className="border border-gray-300 p-2">{selectedCountry}</td>
+            {matchDetails.map(match => {
+              const playerStats = match.players[selectedCountry][playerName] || {}; // Ensure player exists in match
+              
+              
+              return (
+              <td key={`${match.match_id}-${selectedPlayerStat}`} className="border border-gray-300 p-2">
+                {playerStats[selectedPlayerStat] ?? "-"} {/* Display stats dynamically */}
+              </td>
+              );
+            })}
+          </tr>
+        ))}
+        </tbody>
+      </table>
+    );
+  };
+    
+
   return (
     <table className="border-collapse border border-gray-400 w-full">
       <thead>
@@ -61,5 +106,3 @@ const MatchDetailsTable: React.FC<{matchDetails:Array<MatchDetails>; type:Array<
 };
 
 export default MatchDetailsTable;
-
-// #TODO add another dropdownbox to select relevant stats wanted, can select multiple Stats, player stats can only select as single option

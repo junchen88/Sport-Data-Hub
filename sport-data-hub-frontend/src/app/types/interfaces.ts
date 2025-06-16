@@ -13,7 +13,7 @@ export interface Match {
   
   export interface MatchDetails {
     match_id:number,
-    date:object,
+    date:string,
     yellow_cards:number,
     red_cards:number,
     home_shots:number,

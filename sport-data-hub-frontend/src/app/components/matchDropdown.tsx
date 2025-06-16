@@ -20,6 +20,7 @@ export default function MatchDropdown() {
 
   const [countries, setCountries] = useState<string[]>([]);
   const [selectedCountry, setSelectedCountry] = useState<string>("default");
+  const [selectedPlayerStat, setSelectedPlayerStat] = useState<string>("")
                                                                             
   const matchDetailKeys =[
     "yellow_cards",
@@ -34,7 +35,19 @@ export default function MatchDropdown() {
     "home_fouls",
     "players",
   ]
-  const [selectedStats, setSelectedStats] = useState<string[]>([]); // ✅ Add state for selected stats
+
+  const playerStatsOptions = [
+
+    "goals_scored",
+    "assists",
+    "shots",
+    "shots_target",
+    "fouls_committed",
+    "fouls_won",
+
+  ]
+
+  const [selectedStats, setSelectedStats] = useState<string[]>([]); // Add state for selected stats
 
   useEffect(() => {
     axios.get("http://127.0.0.1:8000/football/api/returnScheduledMatches/0")
@@ -42,7 +55,7 @@ export default function MatchDropdown() {
 
         const formattedMatches = response.data.map((match: any) => {
           const timestampInMs = match.startTimestamp * 1000;
-          const formattedDate  = new Date(timestampInMs).toLocaleString("en-AU", { timeZone: "Australia/Perth" }); // ✅ Store formatted date
+          const formattedDate  = new Date(timestampInMs).toLocaleString("en-AU", { timeZone: "Australia/Perth" }); // Store formatted date
           return {
             id: match.id,                                     // Mapping id
             date: new Date(timestampInMs).toLocaleString(),   // Mapping start time stamp to date
@@ -146,15 +159,37 @@ export default function MatchDropdown() {
           )
         }
       </select>
+      {selectedStats.includes("players") && <PlayerStatsDropDown playerStatsOptions={playerStatsOptions} selectedPlayerStat={selectedPlayerStat} setSelectedPlayerStat={setSelectedPlayerStat}/>}
 
       {/* if a match is selected, render MatchDetailsComponent with matchId prop */}
-      {selectedMatch && <MatchDetailsComponent match={selectedMatch} selectedStats={selectedStats} selectedCountry={selectedCountry}/>}
+      {selectedMatch && <MatchDetailsComponent match={selectedMatch} selectedStats={selectedStats} selectedCountry={selectedCountry} selectedPlayerStat={selectedPlayerStat}/>}
     </div>
   );
 }
 
+const PlayerStatsDropDown: React.FC<{playerStatsOptions: string[], selectedPlayerStat:string; setSelectedPlayerStat:(selectedPlayerStat: string) => void}>=({playerStatsOptions, selectedPlayerStat, setSelectedPlayerStat}) => (
+  <select 
+    name="playerDropdown" id="playerDropdown" className="p-2 border rounded bg-gray-200"
+    value={selectedPlayerStat}
+    onChange={(e) => {
+      setSelectedPlayerStat(e.target.value)
+    }}
+  >
+    <option key="" value="">Select a Player Stat</option>
+    {
+      playerStatsOptions.map(
+        (playerStatsOption) => (
+          <option key={playerStatsOption} value={playerStatsOption}>
+            {playerStatsOption}
+          </option>
+        )
+      )
+    }
+  </select>
+)
+
 // Fetch match details when selected
-const MatchDetailsComponent: React.FC<{ match: Match; selectedStats: string[]; selectedCountry:string}> = ({ match, selectedStats, selectedCountry }) => {
+const MatchDetailsComponent: React.FC<{ match: Match; selectedStats: string[]; selectedCountry:string; selectedPlayerStat:string}> = ({ match, selectedStats, selectedCountry, selectedPlayerStat}) => {
   const [homeMatchData, setHomeMatchData] = useState<MatchDetails[] | null>(null);
   const [awayMatchData, setAwayMatchData] = useState<MatchDetails[] | null>(null);
 
@@ -170,12 +205,12 @@ const MatchDetailsComponent: React.FC<{ match: Match; selectedStats: string[]; s
       .catch((error: AxiosError) => console.error("Error fetching matches:", error));
     }, [match]);
 
-  var matchData = match.home_team === selectedCountry ? homeMatchData : match.away_team === selectedCountry ?  awayMatchData : null;
+  const matchData = match.home_team === selectedCountry ? homeMatchData : match.away_team === selectedCountry ?  awayMatchData : null;
   // console.log(awayMatchData);
   return matchData ? (
     <div className="mt-4 p-4 bg-white shadow rounded">
-      <h3 className="text-lg font-bold">Details</h3>
-      <MatchDetailsTable matchDetails={matchData||[]} type={selectedStats} homeTeam={match.home_team} awayTeam={match.away_team} selectedCountry={selectedCountry}/>
+      <h3 className="text-lg font-bold capitalize">Details: {selectedPlayerStat.replace(/_/g, " ")}</h3>
+      <MatchDetailsTable matchDetails={matchData||[]} type={selectedStats} selectedCountry={selectedCountry} selectedPlayerStat={selectedPlayerStat}/>
     </div>
   ) : selectedCountry ? (<p>Please select a country/team...</p>):
   

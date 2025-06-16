@@ -7,4 +7,5 @@ Website for displaying stats for sports like football, AFL, etc
 `venue": f"{matchJsonData['venue']['stadium']['name']}, ({matchJsonData['venue']['city']['name']}, {matchJsonData['venue']['country']['name']})`
 3. Add comment, then work on check db before scraping, and check for player club status/changes
 
-now: get scheduled matches from db -> send to page -> create dropdown list -> get first list match with each team getTeamPastMatch from db -> user selects new match from list -> get its corresponding data
+
+now: fix lineup problem, database bug: 2025-06-16 10:22:18,623 - ERROR - failed to query for team at getTeam: TimeoutError('QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00') (missing session.close?)

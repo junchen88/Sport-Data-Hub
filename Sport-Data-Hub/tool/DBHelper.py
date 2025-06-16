@@ -320,8 +320,8 @@ class DBHelper():
         group = group[['player_name',"team_id","homeTeam_id","awayTeam_id","home_team_name","away_team_name"] + playerStatCol]
         # Convert data to a dictionary indexed by player_name
         
-        #TODO bug - failed to get match data at getTeamPastMatch ValueError("DataFrame index must be unique for orient='index'.")
         player_data = group.set_index('player_id').to_dict(orient='index')
+        
         # Separate home and away players
         home_players = {
             # filter out key "homeTeam_id" and "awayTeam_id" (not needed in playerstats)
@@ -395,7 +395,8 @@ class DBHelper():
 
                 
                 allMatchesResults = {}
-                matchCol = [column.name for column in self.Match.__table__.c]
+                #TODO include home/away teamname and its country see line 377 and add below
+                matchCol = [column.name for column in self.Match.__table__.c] + ["home_team_name", "away_team_name"]
                 df = pd.DataFrame(results)
 
                 # Use DataFrame.columns.duplicated() to drop duplicate columns
