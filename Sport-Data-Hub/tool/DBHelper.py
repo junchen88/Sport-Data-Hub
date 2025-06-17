@@ -406,6 +406,7 @@ class DBHelper():
                 with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
                     print(pastMatchesStat)
                 pastMatchesStat = pastMatchesStat.to_dict(orient="records") # Converts to a list of dictionaries
+                session.close()
                 return pastMatchesStat
 
 

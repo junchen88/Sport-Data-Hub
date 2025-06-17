@@ -8,4 +8,5 @@ Website for displaying stats for sports like football, AFL, etc
 3. Add comment, then work on check db before scraping, and check for player club status/changes
 
 
-now: fix lineup problem, database bug: 2025-06-16 10:22:18,623 - ERROR - failed to query for team at getTeam: TimeoutError('QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00') (missing session.close?)
+now: fix lineup problem
+check db first if it contains the most recent matches + at least "num" matches
