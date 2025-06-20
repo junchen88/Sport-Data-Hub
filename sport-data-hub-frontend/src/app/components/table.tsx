@@ -5,7 +5,7 @@ import {MatchDetails } from "@/app/types/interfaces";
 import { Stats } from "fs";
 
 
-const MatchDetailsTable: React.FC<{lineup:Record<string, string[]>; matchDetails:Array<MatchDetails>; type:Array<string>; selectedCountry:string; selectedPlayerStat:string}> = ({lineup, matchDetails, type, selectedCountry, selectedPlayerStat}) => {
+const MatchDetailsTable: React.FC<{lineup:Record<string, string[]>; matchDetails:Array<MatchDetails>; type:Array<string>; selectedCountry:string; selectedPlayerStat:string; threshValue:number}> = ({lineup, matchDetails, type, selectedCountry, selectedPlayerStat, threshValue}) => {
   if (!matchDetails) return <p className="text-gray-500">No match details available.</p>;
 
   matchDetails.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -46,7 +46,11 @@ const MatchDetailsTable: React.FC<{lineup:Record<string, string[]>; matchDetails
               
               
               return (
-              <td key={`${match.match_id}-${selectedPlayerStat}`} className="border border-gray-300 p-2">
+              <td key={`${match.match_id}-${selectedPlayerStat}`} className={`border border-gray-300 p-2 ${
+                playerStats[selectedPlayerStat] !== undefined &&
+                playerStats[selectedPlayerStat] >= threshValue
+                  ? 'bg-blue-400'
+                  : ''}`}>
                 {playerStats[selectedPlayerStat] ?? "-"} {/* Display stats dynamically */}
               </td>
               );

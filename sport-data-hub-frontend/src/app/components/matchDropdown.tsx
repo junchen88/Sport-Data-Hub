@@ -20,7 +20,9 @@ export default function MatchDropdown() {
 
   const [countries, setCountries] = useState<string[]>([]);
   const [selectedCountry, setSelectedCountry] = useState<string>("default");
-  const [selectedPlayerStat, setSelectedPlayerStat] = useState<string>("")
+  const [selectedPlayerStat, setSelectedPlayerStat] = useState<string>("");
+
+  const [threshValue, setThreshValue] = useState<number>(1);
                                                                             
   const matchDetailKeys =[
     "yellow_cards",
@@ -161,9 +163,19 @@ export default function MatchDropdown() {
         }
       </select>
       {selectedStats.includes("players") && <PlayerStatsDropDown playerStatsOptions={playerStatsOptions} selectedPlayerStat={selectedPlayerStat} setSelectedPlayerStat={setSelectedPlayerStat}/>}
+      <div className="py-2">
+        <label><h3 className="inline-block pr-2">Stat Threshold: </h3></label>
+        <input type="text" name="statValueThresh" id="statValueThresh" value={threshValue} 
+        onChange={(e) => {
+          const val = Number(e.target.value);
+          isNaN(val) ? setThreshValue(1) : setThreshValue(val);
+        }}
+        className="p-1 border rounded bg-gray-200 text-center max-w-24"
+        />
+      </div>
 
       {/* if a match is selected, render MatchDetailsComponent with matchId prop */}
-      {selectedMatch && <MatchDetailsComponent match={selectedMatch} selectedStats={selectedStats} selectedCountry={selectedCountry} selectedPlayerStat={selectedPlayerStat}/>}
+      {selectedMatch && <MatchDetailsComponent match={selectedMatch} selectedStats={selectedStats} selectedCountry={selectedCountry} selectedPlayerStat={selectedPlayerStat} threshValue={threshValue}/>}
     </div>
   );
 }
@@ -205,7 +217,7 @@ const getLineupPlayer = (match: Match): Record<string, string[]> => {
 };
 
 // Fetch match details when selected
-const MatchDetailsComponent: React.FC<{ match: Match; selectedStats: string[]; selectedCountry:string; selectedPlayerStat:string}> = ({ match, selectedStats, selectedCountry, selectedPlayerStat}) => {
+const MatchDetailsComponent: React.FC<{ match: Match; selectedStats: string[]; selectedCountry:string; selectedPlayerStat:string; threshValue:number}> = ({ match, selectedStats, selectedCountry, selectedPlayerStat, threshValue}) => {
   const [homeMatchData, setHomeMatchData] = useState<MatchDetails[] | null>(null);
   const [awayMatchData, setAwayMatchData] = useState<MatchDetails[] | null>(null);
   
@@ -228,7 +240,7 @@ const MatchDetailsComponent: React.FC<{ match: Match; selectedStats: string[]; s
   return matchData ? (
     <div className="mt-4 p-4 bg-white shadow rounded">
       <h3 className="text-lg font-bold capitalize">Details: {selectedPlayerStat.replace(/_/g, " ")}</h3>
-      <MatchDetailsTable lineup={lineup} matchDetails={matchData||[]} type={selectedStats} selectedCountry={selectedCountry} selectedPlayerStat={selectedPlayerStat}/>
+      <MatchDetailsTable lineup={lineup} matchDetails={matchData||[]} type={selectedStats} selectedCountry={selectedCountry} selectedPlayerStat={selectedPlayerStat} threshValue={threshValue}/>
     </div>
   ) : selectedCountry ? (<p>Please select a country/team...</p>):
   
