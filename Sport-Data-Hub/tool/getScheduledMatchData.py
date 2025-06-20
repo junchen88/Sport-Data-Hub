@@ -26,6 +26,33 @@ teamToIDDict = {}
 playerToIDDict = {}
 
 
+async def getMatchLineup(asession, match, queue):
+    response = {}
+    try:
+        response = await scraper.getMatchLineup(asession, match["id"], queue)
+        return response.json()
+
+
+    except Exception as e:
+        scraper.logger.error(f"failed to fetch player lineup {repr(e)}")
+        return {}
+
+
+async def getScheduledLineup(matchInfos):
+    asession = AsyncHTMLSession()
+    # Humanize request
+    #--------------------------------------------------------
+    # Fill queue with 3 slots to control execution
+    queue = asyncio.Queue()
+    for _ in range(scrape_config.QUEUE_SLOTS):
+        queue.put_nowait(True)
+    #--------------------------------------------------------
+    tasks = [getMatchLineup(asession, match, queue) for match in matchInfos]
+    responses = await async_tqdm.gather(*tasks, desc="getting past 5 matches info")
+    await asession.close()
+    return responses
+
+
 # scrape past matches for each team, default no of matches = 5
 # read db and get data first, if not use scraper.getPast5matches
 async def scrapeScheduledMatchStat(scraper:st.Scraper, scheduledMatchesInfos):
@@ -51,8 +78,8 @@ async def scrapeScheduledMatchStat(scraper:st.Scraper, scheduledMatchesInfos):
     #-------------------------------------------------------
     # get past 5 matches for each new team that has not enough data
     pageNum = 0
-    tasks = [scraper.getPast5Matches(asession, match["home_id"], match["home"], pastMatchInfo=None, pageNum=pageNum, queue=queue) for match in scheduledMatchesInfos]
-    tasks.extend([scraper.getPast5Matches(asession, match["away_id"], match["home"], pastMatchInfo=None, pageNum=pageNum, queue=queue) for match in scheduledMatchesInfos])
+    tasks = [scraper.getPastMatches(asession, match["home_id"], match["home"], pastMatchInfo=None, pageNum=pageNum, queue=queue) for match in scheduledMatchesInfos]
+    tasks.extend([scraper.getPastMatches(asession, match["away_id"], match["home"], pastMatchInfo=None, pageNum=pageNum, queue=queue) for match in scheduledMatchesInfos])
     allPast5MatchIDs = await async_tqdm.gather(*tasks, desc="getting past 5 matches info")
     # print(allPast5MatchIDs)    
 
@@ -220,6 +247,14 @@ def getScheduledMatchStat(day):
         # dbHelper.insert_player({"name":"Jordan Pickford", "team_id":"5", "country_id":"5", "birth_date": datetime.now()})
         # dbHelper.insert_team({"team":"test club", "country": "test country"})
         scraper.closeSession()
+
+        lineupDatas = asyncio.run(getScheduledLineup(matchesInfos))
+
+        for i,match in enumerate(matchesInfos):
+            
+            match["lineup"] = lineupDatas[i]
+
+        print(matchesInfos)
     return matchesInfos
 
 # getScheduledMatchStat(1)

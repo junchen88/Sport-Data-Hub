@@ -5,11 +5,16 @@ import {MatchDetails } from "@/app/types/interfaces";
 import { Stats } from "fs";
 
 
-const MatchDetailsTable: React.FC<{matchDetails:Array<MatchDetails>; type:Array<string>; selectedCountry:string; selectedPlayerStat:string}> = ({ matchDetails, type, selectedCountry, selectedPlayerStat}) => {
+const MatchDetailsTable: React.FC<{lineup:Record<string, string[]>; matchDetails:Array<MatchDetails>; type:Array<string>; selectedCountry:string; selectedPlayerStat:string}> = ({lineup, matchDetails, type, selectedCountry, selectedPlayerStat}) => {
   if (!matchDetails) return <p className="text-gray-500">No match details available.</p>;
 
   matchDetails.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const playerNames = Object.keys(matchDetails[0].players[selectedCountry]);
+
+  // if predicted lineup is empty/undefine, use the most recent one to prevent undefine bug
+  const lastLineupUsed = Boolean(lineup[selectedCountry]);
+  const playerNames = lastLineupUsed ? lineup[selectedCountry] : (Object.keys(matchDetails[0].players[selectedCountry]))
+
+
   const anyTeam = Object.keys(matchDetails[0]["players"])[0];
   const anyKey = Object.keys(matchDetails[0]["players"][anyTeam])[0];
   const statName = Object.keys(matchDetails[0]["players"][anyTeam][anyKey])
@@ -19,7 +24,8 @@ const MatchDetailsTable: React.FC<{matchDetails:Array<MatchDetails>; type:Array<
       <table className="border-collapse border border-gray-400 w-full">
         <thead>
           <tr>
-            <th className="border border-gray-300 p-2 capitalize">Player Name</th>
+            <th className={`border border-gray-300 p-2 capitalize ${
+              lastLineupUsed ? 'bg-green-200' : 'bg-red-200'}`}>Player Name</th>
             <th className="border border-gray-300 p-2 capitalize">Team</th>
             
             {Object.keys(matchDetails)

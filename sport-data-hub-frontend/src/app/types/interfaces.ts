@@ -9,6 +9,7 @@ export interface Match {
     name: string;
     startTimeStampInMS: number;
     date: string;
+    lineup: Record<string, any>; // ✅ JSON should be defined explicitly;
   }
   
   export interface MatchDetails {

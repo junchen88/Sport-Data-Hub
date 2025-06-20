@@ -8,5 +8,4 @@ Website for displaying stats for sports like football, AFL, etc
 3. Add comment, then work on check db before scraping, and check for player club status/changes
 
 
-now: fix lineup problem
-check db first if it contains the most recent matches + at least "num" matches
+now:check db first if it contains the most recent matches + at least "num" matches

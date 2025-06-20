@@ -128,10 +128,10 @@ class Scraper():
             return numberOfMatchesWithData
 
 
-    async def getPast5Matches(self, asession, teamID, teamName, pastMatchInfo, pageNum, queue):
+    async def getPastMatches(self, asession, teamID, teamName, pastMatchInfo, pageNum, queue):
         """
         If database doesn't have the latest H2H match, it will need to call this function to
-        get the latest 5 matches data for the team teamName
+        get the latest NUMOFPASTMATCHES matches data for the team teamName
         
         Parameters:
             - asession: a AsyncHTMLSession
@@ -177,7 +177,7 @@ class Scraper():
             
             numberOfMatchesWithData = 0 # used to track the number of matches with stats, we use it as a counter to stop recursive function
             
-            if len(dataJson["events"]) >= 5:
+            if len(dataJson["events"]) >= scrape_config.NUMOFPASTMATCHES:
                 # -6 since we want 5 results as range stops at target-1
                 # latest result is at page 0 and at the end
                 for i in range(len(dataJson["events"])-1, -1, -1):
@@ -185,16 +185,16 @@ class Scraper():
                     if "status" in match.keys():
                         numberOfMatchesWithData = self.findMatchWithPlayerStat(match, pastMatchInfo, teamName, numberOfMatchesWithData)
                     
-                    if numberOfMatchesWithData >= 5:
+                    if numberOfMatchesWithData >= scrape_config.NUMOFPASTMATCHES:
                         
                         break #stop loop if we got at least 5 data
 
 
             
             # go to the next page and get more data if possible
-            if numberOfMatchesWithData < 5 and dataJson.get("hasNextPage", False):
+            if numberOfMatchesWithData < scrape_config.NUMOFPASTMATCHES and dataJson.get("hasNextPage", False):
                 pageNum += 1
-                await self.getPast5Matches(asession, teamID, teamName, pastMatchInfo, pageNum, queue)
+                await self.getPastMatches(asession, teamID, teamName, pastMatchInfo, pageNum, queue)
         
         except Exception as e:
             self.logger.error(f"failed to obtain past 5 matches data for team: {repr(e)}")
@@ -353,6 +353,37 @@ class Scraper():
             return {}
         
 
+    async def getMatchLineup(self, asession, matchID, queue, identifier=""):
+        # humanize the requests
+        #--------------------------------------------------------------------------
+        await queue.get()
+
+        delay = random.uniform(scrape_config.DELAY_RANGE[0],scrape_config.DELAY_RANGE[1])
+        await asyncio.sleep(delay)   
+        headers = scrape_config.HEADERS
+        #------------------------------------------------------------------------------
+        lineupPart = matchID + "/lineups"
+        lineupURL = self.EVENTURL + lineupPart
+        response = await asession.get(lineupURL, stream=True, headers=headers)
+
+        queue.task_done()
+        
+        # Refill slot
+        if queue.empty():
+            for _ in range(scrape_config.QUEUE_SLOTS):
+                queue.put_nowait(True)
+
+        # check for request status
+        if response.status_code != 200:
+            try:
+                exceptionMessage = f"{response.status_code} {STATUS_MESSAGES[response.status_code]}"
+            except:
+                exceptionMessage = f"{response.status_code}"
+
+            raise HTTPException(exceptionMessage)
+        
+        return response
+
     async def getPlayerMatchStat(self, asession, matchInfo, queue):
         """
         Get player statistic such as shot made, shot on target, assist, goal scored, fouls, was fouled, shot saved if available
@@ -366,32 +397,13 @@ class Scraper():
             {player:{playerid, matchInfo, shot on target, assist, goal scored, fouls, was fouled, shot saved if available}, ...}
             {} if not valid
         """
-        # humanize the requests
-        #--------------------------------------------------------------------------
-
-        await queue.get()
-
-        delay = random.uniform(scrape_config.DELAY_RANGE[0],scrape_config.DELAY_RANGE[1])
-        await asyncio.sleep(delay)
-        headers = scrape_config.HEADERS
-        
-        #------------------------------------------------------------------------------
-        lineupPart = matchInfo["id"] + "/lineups"
-        lineupURL = self.EVENTURL + lineupPart
-        response = await asession.get(lineupURL, stream=True, headers=headers)
         
 
         # check for link validity, league such as Champions League Qualification
         # will not have players stats, but after qualification, they will have it
         try:
-            # check for request status
-            if response.status_code != 200:
-                try:
-                    exceptionMessage = f"{response.status_code} {STATUS_MESSAGES[response.status_code]}"
-                except:
-                    exceptionMessage = f"{response.status_code}"
-
-                raise HTTPException(exceptionMessage)
+            
+            response = await self.getMatchLineup(asession, matchInfo["id"], queue)
 
 
             allPlayersStats = response.json()
@@ -474,17 +486,8 @@ class Scraper():
             self.logger.error(f"failed to fetch player stats {repr(e)}, removing the match {identifier}...")
             all_player_stats = {}
 
-        finally:
-            queue.task_done()
-            
-            # Refill slot
-            if queue.empty():
-                for _ in range(scrape_config.QUEUE_SLOTS):
-                    queue.put_nowait(True)
-            # print(queue.qsize())
-
-
-            return all_player_stats
+        
+        return all_player_stats
 
     async def getMatchStat(self, asession, matchInfo, queue):
         """

@@ -70,6 +70,7 @@ export default function MatchDropdown() {
             away_team:match.away,
             home_country:match.home_country,
             away_country:match.away_country,
+            lineup: match.lineup,
           }
           
         });
@@ -188,11 +189,28 @@ const PlayerStatsDropDown: React.FC<{playerStatsOptions: string[], selectedPlaye
   </select>
 )
 
+const getLineupPlayer = (match: Match): Record<string, string[]> => {
+  const team = Object.keys(match.lineup)
+
+  //"reducer" callback function on each element of the array
+  // filter for home and away key word only
+  // reduce() accumulate values into an object instead of just mapping items
+  const lineup = team.filter(homeOrAway=>["home","away"].includes(homeOrAway))
+  .reduce((acc, homeOrAway) => {
+    acc[homeOrAway === "home" ? match.home_team : match.away_team] = Object.keys(match.lineup[homeOrAway]["players"])
+      .map(key => match.lineup[homeOrAway]["players"][key]["player"]["name"]);
+    return acc;
+  }, {} as Record<string, string[]>);
+  return lineup
+};
+
 // Fetch match details when selected
 const MatchDetailsComponent: React.FC<{ match: Match; selectedStats: string[]; selectedCountry:string; selectedPlayerStat:string}> = ({ match, selectedStats, selectedCountry, selectedPlayerStat}) => {
   const [homeMatchData, setHomeMatchData] = useState<MatchDetails[] | null>(null);
   const [awayMatchData, setAwayMatchData] = useState<MatchDetails[] | null>(null);
-
+  
+  const lineup = getLineupPlayer(match);
+  
   useEffect(() => {
     axios.get(`http://127.0.0.1:8000/football/api/returnTeamPastMatches/?team=${match.home_team}&country=${match.home_country}`) // Axios GET request
       .then((response: AxiosResponse<MatchDetails[]>) => setHomeMatchData(response.data)) // Axios auto-parses JSON
@@ -210,7 +228,7 @@ const MatchDetailsComponent: React.FC<{ match: Match; selectedStats: string[]; s
   return matchData ? (
     <div className="mt-4 p-4 bg-white shadow rounded">
       <h3 className="text-lg font-bold capitalize">Details: {selectedPlayerStat.replace(/_/g, " ")}</h3>
-      <MatchDetailsTable matchDetails={matchData||[]} type={selectedStats} selectedCountry={selectedCountry} selectedPlayerStat={selectedPlayerStat}/>
+      <MatchDetailsTable lineup={lineup} matchDetails={matchData||[]} type={selectedStats} selectedCountry={selectedCountry} selectedPlayerStat={selectedPlayerStat}/>
     </div>
   ) : selectedCountry ? (<p>Please select a country/team...</p>):
   

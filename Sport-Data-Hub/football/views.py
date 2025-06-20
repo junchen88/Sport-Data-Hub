@@ -1,9 +1,11 @@
 from django.shortcuts import render
-from .utils import getPastFiveMatchesAndPlayersStats, getScheduledMatches
+from .utils import getTeamPastMatchesFromDB, getScheduledMatches
 from rest_framework.decorators import api_view
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.response import Response
+from django.http import JsonResponse
+
 # Create your views here.
 
 @api_view(['GET'])
@@ -20,11 +22,12 @@ def returnScheduledMatches(request, day):
     
     return Response(getScheduledMatches(day))
 
-# @api_view(['GET'])
-# def get_last_5_matches_with_player_stats(request, team_name):
-#     try:
-#         team = get_object_or_404(Team, team_id=team_id)
-#     except Team.DoesNotExist:
-#         return Response({'error': 'Team not found'}, status=status.HTTP_404_NOT_FOUND)
-#
-# getPastFiveMatchesAndPlayersStats(team_name, country):
+
+@api_view(['GET'])
+def getTeamPastMatches(request):
+    team_name = request.GET.get('team')
+    country = request.GET.get('country')
+    if not team_name or not country:
+        return JsonResponse({"error": "Missing parameters"}, status=400)
+
+    return Response(getTeamPastMatchesFromDB(team_name, country))
